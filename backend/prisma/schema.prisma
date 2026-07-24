@@ -1,0 +1,1051 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// Core Auth & Roles (From SQL Dump)
+// ---------------------------------------------------------
+
+model User {
+  user_id      String    @id @default(uuid())
+  email        String    @unique
+  password     String
+  full_name    String?
+  tenant_id    String
+  role_id      String
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  // Relations
+  tenant       Tenant    @relation(fields: [tenant_id], references: [id])
+  role         Role      @relation(fields: [role_id], references: [role_id])
+  employee     Employee? // One-to-one with Employee
+  
+  // Access
+  locationAccess UserLocationAccess[]
+  
+  // Extended Modules Relations
+  expressionsOfInterest ExpressionOfInterest[] // From User side
+  signedLeases          LeaseSignature[]
+  saleInterests         SaleInterest[]
+  propertySalesAsBuyer  PropertySale[] @relation("BuyerSales")
+  
+  // Workflows Module
+  assignedTasks Task[] @relation("AssignedTasks")
+  createdTasks  Task[] @relation("CreatedTasks")
+  
+  // Security Module
+  auditLogs     AuditLog[]
+  
+  // Field App Module
+  fieldDevices  FieldDevice[]
+  
+  // Security Module (Enhanced)
+  groups        UserGroup[]
+
+  // Tables
+  @@map("users")
+}
+
+model Role {
+  role_id     String  @id @default(uuid())
+  role_code   String
+  role_name   String
+  description String?
+  tenant_id   String?
+
+  // Relations
+  tenant      Tenant?      @relation(fields: [tenant_id], references: [id])
+  users       User[]
+  permissions Permission[] // Implicit many-to-many in dump: "_PermissionToRole"
+
+  @@unique([role_code, tenant_id])
+  @@map("roles")
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  action      String
+  resource    String
+  description String?
+
+  // Relations
+  roles       Role[]
+
+  @@unique([action, resource])
+  @@map("permissions")
+}
+
+model UserLocationAccess {
+  userId     String
+  locationId String
+
+  user     User     @relation(fields: [userId], references: [user_id])
+  location Location @relation(fields: [locationId], references: [id])
+
+  @@id([userId, locationId])
+  @@map("user_location_access")
+}
+
+// ---------------------------------------------------------
+// Multi-Tenancy Root (From SQL Dump)
+// ---------------------------------------------------------
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  domain    String?  @unique
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now()) @map("createdAt") // Dump uses camelCase in CREATE stmt but typical postgres is snake. Checking dump: "createdAt" timestamp(3)
+  updatedAt DateTime @updatedAt @map("updatedAt")
+
+  // Relations
+  users              User[]
+  roles              Role[]
+  locations          Location[]
+  properties         Property[]
+  units              Unit[]
+  employees          Employee[]
+  vendors            Vendor[]
+  renters            Renter[]
+  leases             Lease[]
+  invoices           Invoice[]
+  payments           Payment[]
+  maintenanceTickets MaintenanceTicket[]
+  workOrders         WorkOrder[]
+  documents          Document[]
+  
+  // Property Module Relations (Phase 1)
+  propertyValuations PropertyValuation[]
+  propertyTags       PropertyTag[]
+  propertyFeatures   PropertyFeature[]
+  landlords          Landlord[]
+  complianceRecords  ComplianceRecord[]
+  
+  // Workflows Module
+  workflowRules      WorkflowRule[]
+  tasks              Task[]
+  
+  // Security Module
+  auditLogs          AuditLog[]
+  
+  // Portal Module
+  portalConfig       PortalConfig?
+
+  // Field Module
+  fieldDevices       FieldDevice[]
+
+  // Integrations Module
+  integrationConnections IntegrationConnection[]
+  
+  // User Groups
+  userGroups         UserGroup[]
+
+  // Inventory Module
+  inventoryItems     InventoryItem[]
+
+  // POS Module
+  sales              Sale[]
+ 
+  config             Json?    // Stores branding (logo, colors), contact details, etc.
+  features           Json?    // Stores enabled/disabled modules keys e.g. { "pos": true, "inventory": false }
+
+  // Contracts Module
+  contracts          Contract[]
+  contractTemplates  ContractTemplate[]
+  contractClauses    ContractClause[]
+
+  @@map("tenants")
+}
+
+// ---------------------------------------------------------
+// Locations (From SQL Dump)
+// ---------------------------------------------------------
+
+model Location {
+  id        String   @id @default(uuid())
+  name      String
+  type      String   // REGION, PROVINCE, DISTRICT, LLG
+  level     Int      @default(1) // 1=Region, 2=Province, 3=District, 4=LLG
+  parentId  String?
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  parent      Location?  @relation("LocationHierarchy", fields: [parentId], references: [id])
+  children    Location[] @relation("LocationHierarchy")
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  properties  Property[]
+  userAccess  UserLocationAccess[]
+
+  @@map("locations")
+}
+
+// ---------------------------------------------------------
+// Property Management (From SQL Dump + Extensions)
+// ---------------------------------------------------------
+
+model Property {
+  id         String   @id @default(uuid())
+  name       String
+  type       String
+  status     String
+  locationId String
+  tenantId   String
+  address    String?
+  images     String[] // Array of text
+  latitude   Float?
+  longitude  Float?
+  province   String?
+  district   String?
+  llg        String?
+  region     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Extension Fields
+  listing_type String  @default("LEASE") // LEASE, SALE
+  sale_price   Decimal? @db.Decimal(65, 30)
+  
+  // Additional Property Metadata (non-breaking additions)
+  description  String?  // Property description
+  yearBuilt    Int?     // Year of construction
+  landArea     Float?   // Land area in sqm
+  floor_count  Int?     // Number of floors
+  parking_spaces Int?   // Available parking
+
+  
+  // Relations
+  location      Location   @relation(fields: [locationId], references: [id])
+  tenant        Tenant     @relation(fields: [tenantId], references: [id])
+  landlord      Landlord?  @relation(fields: [landlordId], references: [id])
+  landlordId    String?    // Optional - for agent-managed properties
+  units         Unit[]
+  leases        Lease[]
+  maintenance   MaintenanceTicket[]
+  
+  // Extended Relations
+  expressionsOfInterest ExpressionOfInterest[]
+  saleInterests         SaleInterest[]
+  sales                 PropertySale[]
+  ownershipHistory      OwnershipHistory[]
+  
+  // New Module Relations
+  valuations    PropertyValuation[]
+  tags          PropertyTag[]
+  features      PropertyFeature[]
+  complianceRecords ComplianceRecord[]
+
+  @@map("properties")
+}
+
+model Unit {
+  id         String   @id @default(uuid())
+  name       String
+  code       String?
+  type       String
+  marketRent Decimal? @db.Decimal(65, 30)
+  area       Float?
+  bedrooms   Int?
+  bathrooms  Float?
+  status     String   @default("AVAILABLE")
+  propertyId String
+  tenantId   String
+  images     String[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  property   Property @relation(fields: [propertyId], references: [id])
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  
+  // Extended
+  expressionsOfInterest ExpressionOfInterest[]
+
+  @@map("units")
+}
+
+// ---------------------------------------------------------
+// Actors: Employees, Vendors, Renters (From SQL Dump)
+// ---------------------------------------------------------
+
+model Employee {
+  id         String   @id @default(uuid())
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  title      String?
+  department String?
+  hireDate   DateTime
+  status     String   @default("ACTIVE")
+  userId     String?  @unique
+  tenantId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  user    User?   @relation(fields: [userId], references: [user_id])
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+
+  @@map("employees")
+}
+
+model Vendor {
+  vendor_id  String   @id @default(uuid())
+  name       String
+  email      String?
+  phone      String?
+  category   String?
+  status     String   @default("ACTIVE")
+  tenant_id  String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  tenant     Tenant      @relation(fields: [tenant_id], references: [id])
+  workOrders WorkOrder[]
+
+  @@map("vendors")
+}
+
+model Renter {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  type      String
+  status    String   @default("ACTIVE")
+  idNumber  String? // "idNumber" in dump
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  leases    Lease[]
+  invoices  Invoice[] @relation("BillToParty")
+  payments  Payment[]
+
+  @@map("renters")
+}
+
+// Land lord Model for Agent-Managed Properties
+model Landlord {
+  id            String   @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String
+  address       String?
+  idNumber      String?  // National ID or Tax ID
+  bankName      String?
+  accountNumber String?
+  accountName   String?
+  notes         String?
+  tenantId      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  properties Property[]
+
+  @@map("landlords")
+}
+
+// ---------------------------------------------------------
+// Operations: Leases, Invoices, Payments (From SQL Dump)
+// ---------------------------------------------------------
+
+model Lease {
+  id         String   @id @default(uuid())
+  startDate  DateTime
+  endDate    DateTime
+  rentAmount Decimal  @db.Decimal(65, 30)
+  frequency  String
+  status     String
+  propertyId String
+  renterId   String
+  tenantId   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  property   Property @relation(fields: [propertyId], references: [id])
+  renter     Renter   @relation(fields: [renterId], references: [id])
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  invoices   Invoice[]
+  
+  // Extended
+  signatures LeaseSignature[]
+
+  @@map("leases")
+}
+
+model Invoice {
+  invoice_id       String   @id @default(uuid())
+  invoice_no       String?
+  total            Decimal  @db.Decimal(65, 30)
+  balance_due      Decimal  @db.Decimal(65, 30)
+  due_date         DateTime
+  status           String
+  bill_to_party_id String
+  lease_id         String?
+  tenant_id        String
+  items            Json?    // Use Json type for JSONB
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  // Relations
+  billToParty Renter  @relation("BillToParty", fields: [bill_to_party_id], references: [id])
+  lease       Lease?  @relation(fields: [lease_id], references: [id])
+  tenant      Tenant  @relation(fields: [tenant_id], references: [id])
+
+  @@map("invoices")
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  amount    Decimal  @db.Decimal(65, 30)
+  date      DateTime @default(now())
+  method    String
+  reference String?
+  status    String
+  renterId  String
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  renter    Renter @relation(fields: [renterId], references: [id])
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("payments")
+}
+
+// ---------------------------------------------------------
+// Maintenance (From SQL Dump)
+// ---------------------------------------------------------
+
+model MaintenanceTicket {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  priority    String
+  status      String
+  propertyId  String?
+  tenantId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  property   Property?   @relation(fields: [propertyId], references: [id])
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  workOrders WorkOrder[]
+
+  @@map("maintenance_tickets")
+}
+
+model WorkOrder {
+  id                String    @id @default(uuid())
+  ticketId          String
+  status            String
+  description       String?
+  assignedToPartyId String?
+  scheduledDate     DateTime?
+  completedDate     DateTime?
+  costEstimate      Decimal?  @db.Decimal(65, 30)
+  labourCost        Decimal?  @db.Decimal(65, 30)
+  partsCost         Decimal?  @db.Decimal(65, 30)
+  totalCost         Decimal?  @db.Decimal(65, 30)
+  tenantId          String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  ticket   MaintenanceTicket @relation(fields: [ticketId], references: [id])
+  vendor   Vendor?           @relation(fields: [assignedToPartyId], references: [vendor_id]) // Assuming party is vendor
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+
+  @@map("work_orders")
+}
+
+// ---------------------------------------------------------
+// Documents (From SQL Dump)
+// ---------------------------------------------------------
+
+model Document {
+  id        String   @id @default(uuid())
+  name      String
+  url       String
+  type      String
+  mimeType  String?
+  size      Int?
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("documents")
+}
+
+// ---------------------------------------------------------
+// EXTENDED MODULES (From Documentation, NOT in Dump)
+// ---------------------------------------------------------
+
+model ExpressionOfInterest {
+  id         String   @id @default(uuid())
+  propertyId String?
+  unitId     String?
+  userId     String?
+  status     String   // SUBMITTED, REVIEWED, APPROVED, REJECTED
+  message    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  property   Property? @relation(fields: [propertyId], references: [id])
+  unit       Unit?     @relation(fields: [unitId], references: [id])
+  user       User?     @relation(fields: [userId], references: [user_id])
+
+  @@map("expressions_of_interest")
+}
+
+model LeaseSignature {
+  id            String   @id @default(uuid())
+  leaseId       String   @map("lease_id")
+  userId        String?  @map("user_id")
+  signatureType String?  @map("signature_type") // RENTER, MANAGER
+  signatureData String?  @map("signature_data")
+  signedAt      DateTime @default(now()) @map("signed_at")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+
+  lease         Lease    @relation(fields: [leaseId], references: [id])
+  user          User?    @relation(fields: [userId], references: [user_id])
+
+  @@map("lease_signatures")
+}
+
+model SaleInterest {
+  id           String   @id @default(uuid())
+  propertyId   String   @map("property_id")
+  userId       String   @map("user_id")
+  offeredPrice Decimal? @map("offered_price") @db.Decimal(65, 30)
+  status       String?  // SUBMITTED, NEGOTIATING, ACCEPTED, REJECTED
+  terms        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  property     Property @relation(fields: [propertyId], references: [id])
+  user         User     @relation(fields: [userId], references: [user_id])
+
+  @@map("sale_interests")
+}
+
+model PropertySale {
+  id                String    @id @default(uuid())
+  propertyId        String    @map("property_id")
+  buyerId           String    @map("buyer_id")
+  sellerId          String?   @map("seller_id") // Could reference tenant or another user
+  agreedPrice       Decimal?  @map("agreed_price") @db.Decimal(65, 30)
+  status            String?   // DRAFT, SIGNED, SETTLED, COMPLETED
+  contractUrl       String?   @map("contract_url")
+  settlementDate    DateTime? @map("settlement_date")
+  registryReference String?   @map("registry_reference")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  property          Property @relation(fields: [propertyId], references: [id])
+  buyer             User     @relation("BuyerSales", fields: [buyerId], references: [user_id])
+  // Seller relationship depends on if it's a tenant or user, skipping direct relation for now or linking to User if appropriate
+
+  @@map("property_sales")
+}
+
+model OwnershipHistory {
+  id                String    @id @default(uuid())
+  propertyId        String    @map("property_id")
+  ownerId           String?   @map("owner_id")
+  ownerType         String?   @map("owner_type") // INDIVIDUAL, COMPANY, GOVERNMENT
+  acquisitionDate   DateTime? @map("acquisition_date")
+  transferDate      DateTime? @map("transfer_date")
+  transferReason    String?   @map("transfer_reason")
+  documentReference String?   @map("document_reference")
+
+  property          Property  @relation(fields: [propertyId], references: [id])
+
+  @@map("ownership_history")
+}
+
+// ---------------------------------------------------------
+// Property Management Extended Models (Phase 1)
+// Added: 2026-01-11
+// ---------------------------------------------------------
+
+model PropertyValuation {
+  id            String   @id @default(uuid())
+  propertyId    String   @map("property_id")
+  valuationDate DateTime @map("valuation_date")
+  amount        Decimal  @db.Decimal(65, 30)
+  valuationType String   @map("valuation_type") // MARKET, INSURANCE, TAX, RENTAL
+  valuedBy      String?  @map("valued_by") // Company or individual name
+  notes         String?
+  tenantId      String   @map("tenant_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("property_valuations")
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+model PropertyTag {
+  id         String   @id @default(uuid())
+  propertyId String   @map("property_id")
+  tag        String   // e.g., "Premium", "Renovated", "Waterfront"
+  color      String?  // Hex color for UI display
+  tenantId   String   @map("tenant_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("property_tags")
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+model PropertyFeature {
+  id          String   @id @default(uuid())
+  propertyId  String   @map("property_id")
+  feature     String   // e.g., "Pool", "Gym", "Security", "Generator"
+  description String?
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("property_features")
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------
+// Communications Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model MessageThread {
+  id        String   @id @default(uuid())
+  subject   String?
+  tenantId  String   @map("tenant_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages  Message[]
+  
+  // Participants could be handled via a join table or implied by messages for simplicity in this MVP
+  // For now, linking to property or tenant context
+  propertyId String?  @map("property_id")
+  
+  @@map("message_threads")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  threadId  String   @map("thread_id")
+  senderId  String   @map("sender_id") // userId or "SYSTEM" or "GUEST"
+  content   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread    MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  
+  @@map("messages")
+}
+
+// ---------------------------------------------------------
+// Compliance Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model ComplianceRecord {
+  id           String    @id @default(uuid())
+  propertyId   String    @map("property_id")
+  title        String    // e.g. "Fire Safety Certificate"
+  type         String    // FIRE, HEALTH, TAX, INSURANCE, ZONING
+  status       String    // COMPLIANT, WARNING, EXPIRED, MISSING, N/A
+  authority    String?   // Issuing authority
+  issuedDate   DateTime? @map("issued_date")
+  expiryDate   DateTime? @map("expiry_date")
+  documentUrl  String?   @map("document_url")
+  notes        String?
+  tenantId     String    @map("tenant_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  property     Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  
+  @@map("compliance_records")
+  @@index([propertyId])
+  @@index([tenantId])
+  @@index([expiryDate])
+}
+
+// ---------------------------------------------------------
+// Workflows & Automation Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model WorkflowRule {
+  id          String   @id @default(uuid())
+  name        String
+  triggerType String   // e.g. "EVENT", "SCHEDULE"
+  triggerKey  String   // e.g. "LEASE_CREATED", "LEASE_EXPIRING", "MAINTENANCE_LOGGED"
+  actionType  String   // e.g. "CREATE_TASK", "SEND_EMAIL", "NOTIFY_USER"
+  actionData  Json?    // Configuration for the action
+  isActive    Boolean  @default(true) @map("is_active")
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("workflow_rules")
+  @@index([tenantId])
+}
+
+model Task {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  status      String   // TODO, IN_PROGRESS, REVIEW, DONE
+  priority    String   // LOW, MEDIUM, HIGH, URGENT
+  dueDate     DateTime? @map("due_date")
+  assignedTo  String?  @map("assigned_to") // User ID or Role ID potentially
+  relatedTo   String?  @map("related_to")  // ID of related entity (Property, Lease)
+  relatedType String?  @map("related_type") // PROPERTY, LEASE, MAINTENANCE, COMPLIANCE
+  
+  tenantId    String   @map("tenant_id")
+  createdBy   String?  @map("created_by") // User ID
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  assignee    User?    @relation("AssignedTasks", fields: [assignedTo], references: [user_id])
+  creator     User?    @relation("CreatedTasks", fields: [createdBy], references: [user_id])
+
+  @@map("tasks")
+  @@index([tenantId])
+  @@index([assignedTo])
+  @@index([status])
+}
+
+
+
+// ---------------------------------------------------------
+// Security Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String   // LOGIN, CREATE, UPDATE, DELETE
+  resource    String   // USER, PROPERTY, LEASE, etc.
+  resourceId  String?  @map("resource_id")
+  details     Json?    // Changed fields, previous values
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  
+  userId      String?  @map("user_id")
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user        User?    @relation(fields: [userId], references: [user_id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("audit_logs")
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------
+// User Groups Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model UserGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  users       User[]
+
+  @@map("user_groups")
+  @@unique([tenantId, name])
+}
+
+
+// ---------------------------------------------------------
+// Portal Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model PortalConfig {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique @map("tenant_id") // One config per tenant
+  subdomain       String?  @unique
+  primaryColor    String?  @map("primary_color")
+  secondaryColor  String?  @map("secondary_color")
+  logoUrl         String?  @map("logo_url")
+  welcomeMessage  String?  @map("welcome_message")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("portal_configs")
+}
+
+// ---------------------------------------------------------
+// Field App Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model FieldDevice {
+  id          String   @id @default(uuid())
+  deviceId    String   @unique @map("device_id")
+  name        String?
+  appVersion  String?  @map("app_version")
+  platform    String?  // IOS, ANDROID
+  lastSyncAt  DateTime? @map("last_sync_at")
+  status      String   @default("ACTIVE") // ACTIVE, BLOCKED
+  tenantId    String   @map("tenant_id")
+  assignedTo  String?  @map("assigned_to") // User ID
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  user        User?    @relation(fields: [assignedTo], references: [user_id])
+
+  @@map("field_devices")
+  @@index([tenantId])
+}
+
+// ---------------------------------------------------------
+// Integrations Module
+// Added: 2026-01-12
+// ---------------------------------------------------------
+
+model IntegrationConnection {
+  id             String   @id @default(uuid())
+  provider       String   // XERO, QUICKBOOKS, SENDGRID, TWILIO
+  apiKey         String?  @map("api_key")
+  apiSecret      String?  @map("api_secret")
+  status         String   @default("DISCONNECTED")
+  config         Json?    // Provider specific settings
+  tenantId       String   @map("tenant_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("integration_connections")
+  @@unique([tenantId, provider])
+}
+
+// ---------------------------------------------------------
+// Inventory & Asset Module
+// Added: 2026-01-13
+// ---------------------------------------------------------
+
+model InventoryItem {
+  id          String   @id @default(uuid())
+  sku         String?  @unique
+  name        String
+  description String?
+  category    String?  // MAINTENANCE, OFFICE, FURNITURE, CLEANING
+  quantity    Int      @default(0)
+  minQuantity Int      @default(5) @map("min_quantity")
+  unitPrice   Decimal? @map("unit_price") @db.Decimal(65, 30)
+  location    String?  // Storage room, Shelf A, etc.
+  status      String   @default("IN_STOCK") // IN_STOCK, LOW_STOCK, OUT_OF_STOCK
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  transactions StockTransaction[]
+  saleItems   SaleItem[]
+
+  @@map("inventory_items")
+  @@index([tenantId])
+}
+
+model StockTransaction {
+  id              String   @id @default(uuid())
+  inventoryItemId String   @map("inventory_item_id")
+  type            String   // IN, OUT, ADJUSTMENT
+  quantity        Int
+  reason          String?
+  performedBy     String?  @map("performed_by") // User ID
+  tenantId        String   @map("tenant_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  item            InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  
+  @@map("stock_transactions")
+  @@index([tenantId])
+  @@index([inventoryItemId])
+}
+
+// ---------------------------------------------------------
+// POS & Sales Module
+// Added: 2026-01-13
+// ---------------------------------------------------------
+
+model Sale {
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique @map("order_number")
+  customerName    String?  @map("customer_name")
+  totalAmount     Decimal  @map("total_amount") @db.Decimal(65, 30)
+  taxAmount       Decimal  @default(0) @map("tax_amount") @db.Decimal(65, 30)
+  paymentMethod   String   @map("payment_method") // CASH, CARD, TRANSFER
+  status          String   @default("COMPLETED") // COMPLETED, VOIDED, REFUNDED
+  tenantId        String   @map("tenant_id")
+  performedBy     String?  @map("performed_by") // User ID
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  items           SaleItem[]
+
+  @@map("sales_transactions")
+  @@index([tenantId])
+}
+
+model SaleItem {
+  id              String   @id @default(uuid())
+  saleId          String   @map("sale_id")
+  inventoryItemId String?  @map("inventory_item_id")
+  name            String
+  quantity        Int
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(65, 30)
+  totalPrice      Decimal  @map("total_price") @db.Decimal(65, 30)
+
+  sale            Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+
+  @@map("sale_items")
+}
+
+
+// ---------------------------------------------------------
+// Contract Lifecycle Management (CLM)
+// Added: 2026-01-13
+// ---------------------------------------------------------
+
+model Contract {
+  id              String   @id @default(uuid())
+  title           String
+  type            String   // NDA, MSA, VENDOR, EMPLOYMENT, LEASE_ADDENDUM, OTHER
+  status          String   // DRAFT, REVIEW, APPROVED, ACTIVE, EXPIRED, TERMINATED
+  partyName       String?  // The other party involved
+  partyContact    String?  // Contact email or phone
+  startDate       DateTime
+  endDate         DateTime?
+  autoRenew       Boolean  @default(false)
+  renewalNoticeDays Int?   @default(30)
+  value           Decimal? @db.Decimal(65, 30)
+  
+  content         String?  // HTML content or reference to document
+  documentUrl     String?  // PDF upload
+  
+  tenantId        String   @map("tenant_id")
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  
+  obligations     ContractObligation[]
+  clauses         ContractClauseUsage[] // Specific clauses used in this contract
+
+  @@map("contracts")
+  @@index([tenantId])
+}
+
+model ContractTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        String
+  content     String   // HTML template with placeholders
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("contract_templates")
+}
+
+model ContractClause {
+  id          String   @id @default(uuid())
+  name        String   // e.g. "Standard Liability"
+  category    String   // LIABILITY, PAYMENT, TERMINATION
+  text        String   // The actual clause text
+  isMandatory Boolean  @default(false) @map("is_mandatory")
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  usages      ContractClauseUsage[]
+
+  @@map("contract_clauses")
+}
+
+model ContractClauseUsage {
+  id          String   @id @default(uuid())
+  contractId  String   @map("contract_id")
+  clauseId    String   @map("clause_id")
+  
+  contract    Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  clause      ContractClause  @relation(fields: [clauseId], references: [id])
+
+  @@map("contract_clause_usages")
+}
+
+model ContractObligation {
+  id          String   @id @default(uuid())
+  contractId  String   @map("contract_id")
+  title       String
+  description String?
+  dueDate     DateTime? @map("due_date") // Specific date
+  frequency   String?  // ONE_TIME, MONTHLY, YEARLY
+  status      String   // PENDING, COMPLETED, OVERDUE
+  assignedTo  String?  @map("assigned_to") // User ID responsible
+  
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("contract_obligations")
+}

@@ -1,0 +1,92 @@
+
+// ---------------------------------------------------------
+// Contract Lifecycle Management (CLM)
+// Added: 2026-01-13
+// ---------------------------------------------------------
+
+model Contract {
+  id              String   @id @default(uuid())
+  title           String
+  type            String   // NDA, MSA, VENDOR, EMPLOYMENT, LEASE_ADDENDUM, OTHER
+  status          String   // DRAFT, REVIEW, APPROVED, ACTIVE, EXPIRED, TERMINATED
+  partyName       String?  // The other party involved
+  partyContact    String?  // Contact email or phone
+  startDate       DateTime
+  endDate         DateTime?
+  autoRenew       Boolean  @default(false)
+  renewalNoticeDays Int?   @default(30)
+  value           Decimal? @db.Decimal(65, 30)
+  
+  content         String?  // HTML content or reference to document
+  documentUrl     String?  // PDF upload
+  
+  tenantId        String   @map("tenant_id")
+  createdBy       String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant          Tenant   @relation(fields: [tenantId], references: [id])
+  
+  obligations     ContractObligation[]
+  clauses         ContractClauseUsage[] // Specific clauses used in this contract
+
+  @@map("contracts")
+  @@index([tenantId])
+}
+
+model ContractTemplate {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  type        String
+  content     String   // HTML template with placeholders
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@map("contract_templates")
+}
+
+model ContractClause {
+  id          String   @id @default(uuid())
+  name        String   // e.g. "Standard Liability"
+  category    String   // LIABILITY, PAYMENT, TERMINATION
+  text        String   // The actual clause text
+  isMandatory Boolean  @default(false) @map("is_mandatory")
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  usages      ContractClauseUsage[]
+
+  @@map("contract_clauses")
+}
+
+model ContractClauseUsage {
+  id          String   @id @default(uuid())
+  contractId  String   @map("contract_id")
+  clauseId    String   @map("clause_id")
+  
+  contract    Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  clause      ContractClause  @relation(fields: [clauseId], references: [id])
+
+  @@map("contract_clause_usages")
+}
+
+model ContractObligation {
+  id          String   @id @default(uuid())
+  contractId  String   @map("contract_id")
+  title       String
+  description String?
+  dueDate     DateTime? @map("due_date") // Specific date
+  frequency   String?  // ONE_TIME, MONTHLY, YEARLY
+  status      String   // PENDING, COMPLETED, OVERDUE
+  assignedTo  String?  @map("assigned_to") // User ID responsible
+  
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("contract_obligations")
+}

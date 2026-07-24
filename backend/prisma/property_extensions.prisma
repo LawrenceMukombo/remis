@@ -1,0 +1,55 @@
+// ---------------------------------------------------------
+// Property Management Extended Models (Phase 1)
+// ---------------------------------------------------------
+
+model PropertyValuation {
+  id            String   @id @default(uuid())
+  propertyId    String   @map("property_id")
+  valuationDate DateTime @map("valuation_date")
+  amount        Decimal  @db.Decimal(65, 30)
+  valuationType String   @map("valuation_type") // MARKET, INSURANCE, TAX, RENTAL
+  valuedBy      String?  @map("valued_by") // Company or individual name
+  notes         String?
+  tenantId      String   @map("tenant_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("property_valuations")
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+model PropertyTag {
+  id         String   @id @default(uuid())
+  propertyId String   @map("property_id")
+  tag        String   // e.g., "Premium", "Renovated", "Waterfront"
+  color      String?  // Hex color for UI display
+  tenantId   String   @map("tenant_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("property_tags")
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+model PropertyFeature {
+  id          String   @id @default(uuid())
+  propertyId  String   @map("property_id")
+  feature     String   // e.g., "Pool", "Gym", "Security", "Generator"
+  description String?
+  tenantId    String   @map("tenant_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@map("property_features")
+  @@index([propertyId])
+  @@index([tenantId])
+}

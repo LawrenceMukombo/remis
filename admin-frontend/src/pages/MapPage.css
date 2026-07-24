@@ -1,0 +1,72 @@
+.map-page {
+    height: calc(100vh - 64px);
+    /* Full height minus header */
+    display: flex;
+    flex-direction: column;
+}
+
+.map-header {
+    background: white;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1000;
+}
+
+.map-title h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+}
+
+.map-container {
+    flex: 1;
+    position: relative;
+    z-index: 0;
+    /* Leaflet needs lower z-index than modals */
+}
+
+/* Leaflet container override */
+.leaflet-container {
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+.property-popup {
+    min-width: 200px;
+}
+
+.property-popup img {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+.property-popup h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.property-popup p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 0.875rem;
+}
+
+.price-tag {
+    display: inline-block;
+    background-color: #4f46e5;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-top: 0.5rem;
+}
