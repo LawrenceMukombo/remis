@@ -19,6 +19,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import MapPage from './pages/MapPage';
 import CommunicationsPage from './pages/CommunicationsPage';
 import CompliancePage from './pages/CompliancePage';
+import VerificationPage from './pages/VerificationPage';
 import WorkflowsPage from './pages/WorkflowsPage';
 import SecurityPage from './pages/SecurityPage';
 import PortalPage from './pages/PortalPage';
@@ -73,6 +74,7 @@ export function App() {
                         <Route path="/crm" element={<CRMPage />} />
                         <Route path="/documents" element={<DocumentsPage />} />
                         <Route path="/compliance" element={<CompliancePage />} />
+                        <Route path="/verification" element={<VerificationPage />} />
                         <Route path="/analytics" element={<AnalyticsPage />} />
                         <Route path="/map" element={<MapPage />} />
                         <Route path="/workflows" element={<WorkflowsPage />} />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Settings, LogOut, Building2, ChevronLeft, ChevronRight, ChevronDown, ExternalLink, Bell, Clock, Calendar, User } from 'lucide-react';
+import { LayoutDashboard, Settings, LogOut, Building2, ChevronLeft, ChevronRight, ChevronDown, ExternalLink, Bell, Clock, Calendar, User, Globe, Check, Plus } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import { MODULE_GROUPS } from '../constants/appModules';
 import UserProfileModal from './UserProfileModal';
@@ -46,9 +46,10 @@ const Layout: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const { settings } = useSettings();
+    const { settings, organizations, activeTenantId, switchOrganization } = useSettings();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isOrgMenuOpen, setIsOrgMenuOpen] = useState(false);
     const [showProfileModal, setShowProfileModal] = useState(false);
 
     // Default all groups to open (true)
@@ -114,7 +115,10 @@ const Layout: React.FC = () => {
                         {baseNavItems.map(renderNavLink)}
 
                         {MODULE_GROUPS.map((group, idx) => {
-                            const activeModules = group.modules.filter(m => settings?.features?.[m.id]);
+                            const activeModules = group.modules.filter(m => {
+                                if (m.id === 'properties' || m.id === 'leases') return true;
+                                return settings?.features?.[m.id];
+                            });
                             if (activeModules.length === 0) return null;
 
                             const isOpen = openGroups[group.title];
@@ -158,7 +162,7 @@ const Layout: React.FC = () => {
                 {/* External Portal */}
                 <div style={{ padding: '0.5rem 0.75rem', borderTop: '1px solid #f1f5f9' }}>
                     <a
-                        href="http://localhost:5173"
+                        href="http://localhost:5175"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="portal-link"
@@ -200,6 +204,67 @@ const Layout: React.FC = () => {
                     </div>
 
                     <div className="header-actions">
+                        {/* Organization & Multi-Country Switcher */}
+                        <div className="org-switcher-container">
+                            <button
+                                onClick={() => setIsOrgMenuOpen(!isOrgMenuOpen)}
+                                className="org-switcher-btn"
+                                title="Switch Active Organization & Portfolio"
+                            >
+                                <Building2 size={16} color="#4f46e5" />
+                                <div style={{ textAlign: 'left', lineHeight: 1.2 }}>
+                                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
+                                        {settings?.name || 'Active Organization'}
+                                    </div>
+                                    <div style={{ fontSize: '0.725rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Globe size={11} /> {settings?.config?.country || 'Global'} • {settings?.config?.locale?.currency || 'USD'}
+                                    </div>
+                                </div>
+                                <ChevronDown size={14} style={{ color: '#94a3b8' }} />
+                            </button>
+
+                            {isOrgMenuOpen && (
+                                <div className="org-dropdown-menu">
+                                    <div className="org-dropdown-header">
+                                        <span>Organizations & Portfolios</span>
+                                        <span className="org-count-badge">{organizations.length}</span>
+                                    </div>
+                                    <div className="org-list">
+                                        {organizations.map(org => {
+                                            const isSelected = org.id === settings?.id || org.id === activeTenantId;
+                                            return (
+                                                <div
+                                                    key={org.id}
+                                                    onClick={() => {
+                                                        switchOrganization(org.id);
+                                                        setIsOrgMenuOpen(false);
+                                                    }}
+                                                    className={`org-item ${isSelected ? 'selected' : ''}`}
+                                                >
+                                                    <div className="org-item-info">
+                                                        <div className="org-item-name">{org.name}</div>
+                                                        <div className="org-item-meta">
+                                                            📍 {org.config?.country || 'Global'} • {org._count?.properties || 0} props • {org.config?.locale?.currency || 'USD'}
+                                                        </div>
+                                                    </div>
+                                                    {isSelected && <Check size={16} color="#4f46e5" />}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="org-dropdown-footer">
+                                        <Link
+                                            to="/settings"
+                                            onClick={() => setIsOrgMenuOpen(false)}
+                                            className="add-org-link"
+                                        >
+                                            <Plus size={14} /> Configure Organizations
+                                        </Link>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <LiveClock locale={settings?.config?.locale || { dateFormat: 'MM/DD/YYYY', timeFormat: '12h' }} />
 
                         <div className="user-profile-container" style={{ position: 'relative' }}>

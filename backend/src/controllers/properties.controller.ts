@@ -150,6 +150,12 @@ export const getPropertyById = async (req: Request, res: Response) => {
                         renter: true
                     }
                 },
+                complianceRecords: {
+                    where: { type: 'OWNERSHIP_TITLE_DEED' },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1
+                },
+                tenant: true,
                 maintenance: {
                     where: { status: { not: 'CLOSED' } },
                     take: 5,
@@ -162,7 +168,41 @@ export const getPropertyById = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Property not found' });
         }
 
-        // Resolve location names for the hierarchy IDs
+        // Extract registered owner contact and custom category specifications from compliance record if present
+        let ownerPhone: string | null = null;
+        let ownerName: string | null = null;
+        let ownerEmail: string | null = null;
+        let specifications: any = null;
+
+        if (property.complianceRecords && property.complianceRecords.length > 0) {
+            try {
+                const parsedNotes = JSON.parse(property.complianceRecords[0].notes || '{}');
+                ownerPhone = parsedNotes.owner_phone || parsedNotes.ownerPhone || null;
+                ownerName = parsedNotes.owner_name || parsedNotes.ownerName || null;
+                ownerEmail = parsedNotes.owner_email || parsedNotes.ownerEmail || null;
+                specifications = parsedNotes.specifications || null;
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+
+        // Build ancestor hierarchy chain from locationId if present
+        let locationHierarchy: Array<{ level: number; id: string; name: string; type: string }> = [];
+        if (property.locationId) {
+            let cur = await prisma.location.findUnique({ where: { id: property.locationId } });
+            while (cur) {
+                locationHierarchy.unshift({
+                    level: cur.level,
+                    id: cur.id,
+                    name: cur.name,
+                    type: cur.type
+                });
+                if (!cur.parentId) break;
+                cur = await prisma.location.findUnique({ where: { id: cur.parentId } });
+            }
+        }
+
+        // Fallback: Resolve location names for the hierarchy IDs if stored individually
         const locationIds = [
             property.region,
             property.province,
@@ -181,12 +221,59 @@ export const getPropertyById = async (req: Request, res: Response) => {
             });
         }
 
+        const l1 = locationHierarchy.find(h => h.level === 1);
+        const l2 = locationHierarchy.find(h => h.level === 2);
+        const l3 = locationHierarchy.find(h => h.level === 3);
+        const l4 = locationHierarchy.find(h => h.level === 4);
+
+        // Security & Anti-Leakage Shield: Mask landlord contact details and scrub sensitive records
+        const isStaffOrAdmin = Boolean(req.headers['x-staff-token'] || req.headers['authorization']);
+
+        // Helper to format protected phone proxy e.g. +260 97 ••• ••34
+        const maskPhoneNumber = (phone: string | null): string => {
+            if (!phone) return '+260 97 ••• ••XX (REMIS Shield)';
+            const cleaned = phone.replace(/[^0-9+]/g, '');
+            if (cleaned.length < 6) return '+260 ••• ••• (REMIS Shield)';
+            const prefix = cleaned.slice(0, 5);
+            const suffix = cleaned.slice(-2);
+            return `${prefix} ••• ••${suffix} (REMIS Shield)`;
+        };
+
+        const maskedPhone = isStaffOrAdmin ? ownerPhone : maskPhoneNumber(ownerPhone);
+        const maskedEmail = isStaffOrAdmin ? ownerEmail : (ownerEmail ? `shield-listing-${property.id.slice(0, 8)}@remis.org` : null);
+        const safeOwnerName = ownerName ? `${ownerName.split(' ')[0]} (Verified Lister)` : 'Verified Property Owner';
+
+        // Separate and protect sensitive legal relations (Title Deeds, Leases, Tenant PII)
+        const {
+            leases,
+            complianceRecords,
+            maintenance,
+            tenant,
+            ...safePropertyBase
+        } = property;
+
+        const isVerified = (complianceRecords && complianceRecords.length > 0 && complianceRecords[0].status === 'APPROVED') || property.status === 'AVAILABLE';
+
         const enrichedProperty = {
-            ...property,
-            regionName: property.region ? (locationNamesMap[property.region] || property.region) : null,
-            provinceName: property.province ? (locationNamesMap[property.province] || property.province) : null,
-            districtName: property.district ? (locationNamesMap[property.district] || property.district) : null,
-            llgName: property.llg ? (locationNamesMap[property.llg] || property.llg) : null
+            ...safePropertyBase,
+            // Safe verification indicator without leaking uploaded deed PDFs or notes
+            isVerified,
+            verificationBadge: isVerified ? 'VERIFIED_OWNER' : 'PENDING_AUDIT',
+            // Communication Shield: Protected contact proxy preventing off-platform disintermediation
+            ownerPhone: maskedPhone,
+            ownerName: isStaffOrAdmin ? ownerName : safeOwnerName,
+            ownerEmail: maskedEmail,
+            isDirectContactProtected: !isStaffOrAdmin,
+            specifications,
+            locationHierarchy,
+            region: l1 ? l1.id : property.region,
+            regionName: l1 ? l1.name : (property.region ? (locationNamesMap[property.region] || property.region) : null),
+            province: l2 ? l2.id : property.province,
+            provinceName: l2 ? l2.name : (property.province ? (locationNamesMap[property.province] || property.province) : null),
+            district: l3 ? l3.id : property.district,
+            districtName: l3 ? l3.name : (property.district ? (locationNamesMap[property.district] || property.district) : null),
+            llg: l4 ? l4.id : property.llg,
+            llgName: l4 ? l4.name : (property.llg ? (locationNamesMap[property.llg] || property.llg) : null)
         };
 
         res.json(enrichedProperty);
@@ -225,14 +312,40 @@ export const createProperty = async (req: Request, res: Response) => {
             features
         } = req.body;
 
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId) {
+            const firstTenant = await prisma.tenant.findFirst();
+            resolvedTenantId = firstTenant?.id;
+        }
+
+        let resolvedLocationId = locationId;
+        if (!resolvedLocationId) {
+            const existingLoc = await prisma.location.findFirst({
+                where: { tenantId: resolvedTenantId }
+            });
+            if (existingLoc) {
+                resolvedLocationId = existingLoc.id;
+            } else {
+                const newLoc = await prisma.location.create({
+                    data: {
+                        name: 'Primary Location',
+                        type: 'DISTRICT',
+                        level: 1,
+                        tenantId: resolvedTenantId
+                    }
+                });
+                resolvedLocationId = newLoc.id;
+            }
+        }
+
         const property = await prisma.property.create({
             data: {
                 name,
-                type,
-                status,
-                locationId,
-                landlordId: landlordId || null, // Optional connection
-                tenantId,
+                type: type || 'COMMERCIAL',
+                status: status || 'AVAILABLE',
+                locationId: resolvedLocationId,
+                landlordId: landlordId || null,
+                tenantId: resolvedTenantId,
                 address,
                 images: images || [],
                 latitude: latitude ? parseFloat(latitude) : null,
@@ -303,6 +416,7 @@ export const updateProperty = async (req: Request, res: Response) => {
         if (updateData.landlordId !== undefined) data.landlordId = updateData.landlordId;
 
         // Location hierarchy fields
+        if (updateData.locationId !== undefined) data.locationId = updateData.locationId;
         if (updateData.region !== undefined) data.region = updateData.region;
         if (updateData.province !== undefined) data.province = updateData.province;
         if (updateData.district !== undefined) data.district = updateData.district;

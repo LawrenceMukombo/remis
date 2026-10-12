@@ -41,8 +41,8 @@ const GPSPicker: React.FC<GPSPickerProps> = ({ latitude, longitude, onLocationCh
                 setMapPosition([lat, lng]);
             }
         } else {
-            // Default to Port Moresby if no coordinates
-            setMapPosition([-9.4438, 147.1803]);
+            // Default to Lusaka, Zambia if no coordinates
+            setMapPosition([-15.4167, 28.2833]);
         }
     }, [latitude, longitude]);
 
@@ -264,8 +264,9 @@ const GPSPicker: React.FC<GPSPickerProps> = ({ latitude, longitude, onLocationCh
                             key={mapPosition.join(',')} // Force re-render when position changes
                         >
                             <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2wxx_1_19a2e48a7de2e23331436131"
+                                subdomains={['a', 'b', 'c', 'd']}
                             />
                             <LocationMarker position={mapPosition} setPosition={setMapPosition} readOnly={readOnly} />
                         </MapContainer>

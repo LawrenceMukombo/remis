@@ -1,0 +1,166 @@
+.remis-splash-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(145deg, #0f172a 0%, #090d16 50%, #021427 100%);
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Background glowing atmospheric orbs */
+.splash-bg-glow {
+    position: absolute;
+    width: 380px;
+    height: 380px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(2, 132, 199, 0.22) 0%, rgba(5, 150, 105, 0.08) 50%, transparent 70%);
+    filter: blur(50px);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    animation: splashPulse 3s infinite ease-in-out;
+}
+
+@keyframes splashPulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(0.95);
+        opacity: 0.7;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.12);
+        opacity: 1;
+    }
+}
+
+.splash-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    max-width: 380px;
+    width: 100%;
+}
+
+.splash-emblem-wrap {
+    position: relative;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.splash-emblem-ring {
+    position: absolute;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    border: 2px dashed rgba(2, 132, 199, 0.4);
+    animation: ringRotate 16s linear infinite;
+}
+
+@keyframes ringRotate {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.splash-icon-shield {
+    width: 88px;
+    height: 88px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #0f766e 100%);
+    box-shadow: 0 16px 36px rgba(2, 132, 199, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+}
+
+.splash-title {
+    font-size: 2.4rem;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+    color: #ffffff;
+    margin: 0;
+    text-shadow: 0 4px 18px rgba(2, 132, 199, 0.4);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.splash-tagline {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: #38bdf8;
+    text-transform: uppercase;
+    margin-top: 0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.splash-sub {
+    font-size: 0.78rem;
+    color: #94a3b8;
+    line-height: 1.4;
+    margin-bottom: 2rem;
+}
+
+.splash-jurisdiction-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    padding: 0.35rem 0.85rem;
+    border-radius: 99px;
+    color: #e2e8f0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 2.2rem;
+    backdrop-filter: blur(8px);
+}
+
+.splash-progress-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 99px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 0.85rem;
+}
+
+.splash-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #10b981 100%);
+    border-radius: 99px;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.8);
+}
+
+.splash-status-text {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.splash-footer-note {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: #475569;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+}

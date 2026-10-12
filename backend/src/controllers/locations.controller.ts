@@ -13,18 +13,37 @@ export const getLocations = async (req: Request, res: Response) => {
 
         // Basic filters
         if (type) where.type = String(type);
-        if (parentId) where.parentId = String(parentId);
+        if (parentId === 'null' || parentId === 'root') {
+            where.parentId = null;
+        } else if (parentId) {
+            where.parentId = String(parentId);
+        }
         if (level) where.level = Number(level);
 
-        // Tenant scope (optional if public, but good practice)
-        if (tenantId) where.tenantId = String(tenantId);
-        else {
+        const country = req.query.country ? String(req.query.country) : undefined;
+        if (country && !parentId && Number(level) === 1) {
+            where.name = { contains: country, mode: 'insensitive' };
+        }
+
+        // Tenant scope
+        if (tenantId && tenantId !== 'undefined' && tenantId !== 'null' && tenantId !== '') {
+            where.tenantId = String(tenantId);
+        } else if (!parentId && !country) {
+            // Only fall back to firstTenant when querying top-level roots without any tenant/country scope
             const firstTenant = await prisma.tenant.findFirst();
             if (firstTenant) where.tenantId = firstTenant.id;
         }
 
         const locations = await prisma.location.findMany({
             where,
+            include: {
+                _count: {
+                    select: {
+                        children: true,
+                        properties: true
+                    }
+                }
+            },
             orderBy: { name: 'asc' }
         });
 
@@ -80,12 +99,24 @@ export const getLocationById = async (req: Request, res: Response) => {
 export const createLocation = async (req: Request, res: Response) => {
     try {
         const { name, type, level, parentId, tenantId } = req.body;
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId || resolvedTenantId === 'default') {
+            const firstTenant = await prisma.tenant.findFirst();
+            resolvedTenantId = firstTenant?.id;
+        }
+
         const location = await prisma.location.create({
-            data: { name, type, level, parentId, tenantId: tenantId || 'default' }
-            // Note: forcing 'default' or handling tenant logic better in real app
+            data: {
+                name,
+                type: type || 'LOCATION',
+                level: Number(level) || 1,
+                parentId: parentId || null,
+                tenantId: resolvedTenantId
+            }
         });
         res.json(location);
     } catch (error) {
+        console.error('Error creating location:', error);
         res.status(500).json({ message: 'Error creating location', error });
     }
 };
@@ -130,18 +161,60 @@ export const bulkCreateLocations = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Invalid data format. Expected an array of locations.' });
         }
 
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId || resolvedTenantId === 'default') {
+            const firstTenant = await prisma.tenant.findFirst();
+            resolvedTenantId = firstTenant?.id;
+        }
+
         const createdLocations = await prisma.location.createMany({
             data: locations.map((loc: any) => ({
                 name: loc.name,
-                type: loc.type,
-                level: loc.level,
+                type: loc.type || 'LOCATION',
+                level: Number(loc.level) || 1,
                 parentId: loc.parentId || null,
-                tenantId: tenantId || 'default'
+                tenantId: resolvedTenantId
             }))
         });
 
-        res.json({ message: `${createdLocations.count} locations created successfully` });
+        res.json({ message: `${createdLocations.count} locations created successfully`, count: createdLocations.count });
     } catch (error) {
+        console.error('Error bulk creating locations:', error);
         res.status(500).json({ message: 'Error bulk creating locations', error });
+    }
+};
+
+// Seed Complete Zambia Hierarchy for a Tenant
+export const seedZambiaLocations = async (req: Request, res: Response) => {
+    try {
+        const { tenantId } = req.body;
+        let resolvedTenantId = tenantId;
+        if (!resolvedTenantId || resolvedTenantId === 'default') {
+            const firstTenant = await prisma.tenant.findFirst();
+            resolvedTenantId = firstTenant?.id;
+        }
+
+        if (!resolvedTenantId) {
+            return res.status(400).json({ message: 'Valid Tenant ID required' });
+        }
+
+        // Run seed script logic or require script
+        const { exec } = require('child_process');
+        const path = require('path');
+        const scriptPath = path.resolve(__dirname, '../scripts/seedZambiaHierarchy.js');
+
+        exec(`node "${scriptPath}"`, (err: any, stdout: any, stderr: any) => {
+            if (err) {
+                console.error('Error executing Zambia seed script:', err);
+                return res.status(500).json({ message: 'Failed to execute Zambia seeder', error: err.message });
+            }
+            res.json({
+                message: 'Zambia Provinces, Districts, and Settlements successfully seeded!',
+                details: 'All 10 Provinces, official Districts and Communities are now available.'
+            });
+        });
+    } catch (error) {
+        console.error('Error in seedZambiaLocations:', error);
+        res.status(500).json({ message: 'Error seeding Zambia locations', error });
     }
 };

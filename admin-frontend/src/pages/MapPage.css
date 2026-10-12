@@ -1,72 +1,372 @@
 .map-page {
     height: calc(100vh - 64px);
-    /* Full height minus header */
     display: flex;
     flex-direction: column;
+    background: #0f172a;
+    position: relative;
+    overflow: hidden;
 }
 
+.map-page.fullscreen-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+}
+
+/* Header Bar */
 .map-header {
-    background: white;
-    padding: 1rem 2rem;
-    border-bottom: 1px solid #e5e7eb;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(12px);
+    padding: 0.75rem 1.75rem;
+    border-bottom: 1px solid #e2e8f0;
     display: flex;
     justify-content: space-between;
     align-items: center;
     z-index: 1000;
+    box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.07);
+}
+
+.map-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .map-title h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #111827;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
     margin: 0;
+    letter-spacing: -0.02em;
 }
 
+.map-title p {
+    margin: 2px 0 0 0;
+    font-size: 0.8rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.gis-badge {
+    background: #eef2ff;
+    color: #4f46e5;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border: 1px solid #c7d2fe;
+}
+
+/* Header Controls */
+.map-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.map-search-box {
+    display: flex;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 6px 12px;
+    gap: 8px;
+    min-width: 240px;
+    transition: all 0.2s ease;
+}
+
+.map-search-box:focus-within {
+    border-color: #4f46e5;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+.map-search-box input {
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 0.85rem;
+    color: #1e293b;
+    width: 100%;
+}
+
+.map-select-filter {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 0.825rem;
+    font-weight: 600;
+    color: #334155;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Floating Controls Container */
 .map-container {
     flex: 1;
     position: relative;
-    z-index: 0;
-    /* Leaflet needs lower z-index than modals */
+    z-index: 1;
 }
 
-/* Leaflet container override */
+/* Leaflet Container */
 .leaflet-container {
     width: 100%;
     height: 100%;
-    z-index: 0;
+    z-index: 1;
 }
 
-.property-popup {
-    min-width: 200px;
+/* Floating Top-Right Basemap Selector */
+.floating-basemap-panel {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 380px;
+}
+
+.basemap-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 6px;
+}
+
+.basemap-chips-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.basemap-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 4px;
+    background: #f8fafc;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+    gap: 3px;
+}
+
+.basemap-chip:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+}
+
+.basemap-chip.active {
+    background: #eef2ff;
+    border-color: #4f46e5;
+    color: #4f46e5;
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.2);
+}
+
+/* Floating Quick Fly-To Locations Panel */
+.floating-jump-panel {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    max-width: 600px;
+}
+
+.jump-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-right: 4px;
+}
+
+.jump-btn {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #1e293b;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.jump-btn:hover {
+    background: #4f46e5;
+    color: white;
+    border-color: #4f46e5;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+}
+
+/* Floating GIS Layer Toggles */
+.floating-layer-panel {
+    position: absolute;
+    bottom: 40px;
+    right: 16px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #1e293b;
+    font-weight: 600;
+}
+
+.layer-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    padding: 2px 0;
+}
+
+.layer-toggle-row input {
+    cursor: pointer;
+    accent-color: #4f46e5;
+}
+
+/* HUD Coordinates & Zoom Bar */
+.map-hud-bar {
+    position: absolute;
+    bottom: 8px;
+    left: 16px;
+    z-index: 1000;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(8px);
+    color: #f8fafc;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 0.72rem;
+    font-family: monospace;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.hud-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.carto-badge {
+    background: #0284c7;
+    color: white;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 800;
+}
+
+/* Popups */
+.custom-property-popup {
+    min-width: 260px;
+    max-width: 320px;
 }
 
 .property-popup img {
     width: 100%;
-    height: 120px;
+    height: 140px;
     object-fit: cover;
-    border-radius: 6px;
-    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    margin-bottom: 0.6rem;
 }
 
 .property-popup h3 {
-    margin: 0 0 0.25rem 0;
-    font-size: 1rem;
-    font-weight: 600;
+    margin: 0 0 0.35rem 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #0f172a;
 }
 
 .property-popup p {
     margin: 0;
-    color: #6b7280;
-    font-size: 0.875rem;
+    color: #64748b;
+    font-size: 0.825rem;
+    line-height: 1.4;
 }
 
 .price-tag {
     display: inline-block;
-    background-color: #4f46e5;
+    background-color: #059669;
     color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 800;
     margin-top: 0.5rem;
+}
+
+.popup-details-btn {
+    display: block;
+    width: 100%;
+    text-align: center;
+    background: #4f46e5;
+    color: white;
+    padding: 6px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-decoration: none;
+    margin-top: 0.65rem;
+    border: none;
+    cursor: pointer;
+}
+
+.popup-details-btn:hover {
+    background: #4338ca;
 }

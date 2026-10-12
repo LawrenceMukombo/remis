@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Camera } from 'lucide-react';
-import LocationHierarchy from './LocationHierarchy';
+import { X, Upload, Building2, MapPin, Plus, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import GPSPicker from './GPSPicker';
 import { useSettings } from '../context/SettingsContext';
 
@@ -12,20 +10,55 @@ interface CreatePropertyModalProps {
     initialLandlordId?: string;
 }
 
+interface LocationOption {
+    id: string;
+    name: string;
+    type?: string;
+    level?: number;
+}
+
+const GLOBAL_COUNTRIES = [
+    'Zambia',
+    'South Africa',
+    'Australia',
+    'United States',
+    'United Kingdom',
+    'Kenya',
+    'Nigeria',
+    'Ghana',
+    'Canada',
+    'United Arab Emirates',
+    'Papua New Guinea',
+    'Singapore',
+    'New Zealand',
+    'Germany',
+    'France'
+];
+
 const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClose, onSuccess, initialLandlordId }) => {
     const { settings } = useSettings();
-    const primaryColor = settings?.config.branding.primaryColor || '#667eea';
+    const primaryColor = settings?.config?.branding?.primaryColor || '#4f46e5';
     const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    // Available locations loaded from server
+    const [locations, setLocations] = useState<LocationOption[]>([]);
+    const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+    const [showQuickLocationInput, setShowQuickLocationInput] = useState<boolean>(false);
+    const [newLocationName, setNewLocationName] = useState<string>('');
 
     // Form state
     const [formData, setFormData] = useState({
         name: '',
-        type: 'RESIDENTIAL',
+        type: 'COMMERCIAL',
         status: 'AVAILABLE',
         address: '',
+        country: settings?.config?.country || 'Zambia',
+        province: '',
+        district: '',
         latitude: '',
         longitude: '',
         listing_type: 'LEASE',
+        sale_price: '',
         description: '',
         yearBuilt: '',
         landArea: '',
@@ -34,13 +67,56 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
         images: [] as string[]
     });
 
-    // Location hierarchy states
-    const [selectedRegion, setSelectedRegion] = useState('');
-    const [selectedProvince, setSelectedProvince] = useState('');
-    const [selectedDistrict, setSelectedDistrict] = useState('');
-    const [selectedLLG, setSelectedLLG] = useState('');
-    const [selectedCompound, setSelectedCompound] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            fetchLocations();
+            setErrorMessage(null);
+        }
+    }, [isOpen]);
+
+    const fetchLocations = async () => {
+        try {
+            const targetTenantId = settings?.id || user.tenantId || '';
+            const res = await fetch(`http://localhost:4000/api/locations?tenantId=${targetTenantId}`);
+            const data = await res.json();
+            const locList = Array.isArray(data) ? data : (data.data || []);
+            setLocations(locList);
+            if (locList.length > 0 && !selectedLocationId) {
+                setSelectedLocationId(locList[0].id);
+            }
+        } catch (error) {
+            console.error('Error fetching locations:', error);
+        }
+    };
+
+    const handleQuickAddLocation = async () => {
+        if (!newLocationName.trim()) return;
+        try {
+            const res = await fetch('http://localhost:4000/api/locations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: newLocationName.trim(),
+                    type: 'DISTRICT',
+                    level: 2,
+                    tenantId: user.tenantId
+                })
+            });
+            const created = await res.json();
+            if (created && created.id) {
+                setLocations(prev => [...prev, created]);
+                setSelectedLocationId(created.id);
+                setNewLocationName('');
+                setShowQuickLocationInput(false);
+            }
+        } catch (err) {
+            console.error('Error adding location:', err);
+        }
+    };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -51,7 +127,7 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
 
         setUploading(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/upload/file`, {
+            const res = await fetch('http://localhost:4000/api/upload/file', {
                 method: 'POST',
                 body: uploadData
             });
@@ -60,46 +136,41 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                 setFormData(prev => ({ ...prev, images: [...prev.images, data.url] }));
             }
         } catch (error) {
-            console.error("Upload failed", error);
+            console.error('Upload failed:', error);
         } finally {
             setUploading(false);
         }
     };
 
-    const handleCreateProperty = async () => {
+    const handleCreateProperty = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setErrorMessage(null);
+
+        if (!formData.name.trim()) {
+            setErrorMessage('Property name is required.');
+            return;
+        }
+
+        setSubmitting(true);
         try {
-            // Use the selected compound as the locationId, or fallback to first location if not selected
-            // Ideally, we should enforce selection or have a better fallback logic based on requirements
-            // For now, mirroring original logic with a safeguard fetch if needed, 
-            // but effectively we just send what we have. 
-            // NOTE: Original logic fetched locations if ID wasn't set. 
-            // We'll rely on the user making a selection or handling nulls gracefully on backend if permissible,
-            // or performing the fetch here if strictly required. 
-            // Given the complexity, copying the fetch logic is safer.
+            const payload = {
+                ...formData,
+                tenantId: user.tenantId,
+                locationId: selectedLocationId || null,
+                landlordId: initialLandlordId || null,
+                region: formData.country,
+                province: formData.province,
+                district: formData.district,
+                sale_price: formData.sale_price ? parseFloat(formData.sale_price) : null
+            };
 
-            let locationId = selectedCompound;
-
-            if (!locationId) {
-                const locationsRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/locations?tenantId=${user.tenantId}`);
-                const locationsData = await locationsRes.json();
-                locationId = locationsData[0]?.id || user.tenantId;
-            }
-
-            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api'}/properties`, {
+            const res = await fetch('http://localhost:4000/api/properties', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...formData,
-                    tenantId: user.tenantId,
-                    locationId,
-                    landlordId: initialLandlordId || null,
-                    region: selectedRegion || null,
-                    province: selectedProvince || null,
-                    district: selectedDistrict || null,
-                    llg: selectedLLG || null,
-                    images: formData.images
-                })
+                body: JSON.stringify(payload)
             });
+
+            const data = await res.json();
 
             if (res.ok) {
                 onSuccess();
@@ -107,12 +178,16 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                 // Reset form
                 setFormData({
                     name: '',
-                    type: 'RESIDENTIAL',
+                    type: 'COMMERCIAL',
                     status: 'AVAILABLE',
                     address: '',
+                    country: settings?.config?.country || 'United States',
+                    province: '',
+                    district: '',
                     latitude: '',
                     longitude: '',
                     listing_type: 'LEASE',
+                    sale_price: '',
                     description: '',
                     yearBuilt: '',
                     landArea: '',
@@ -120,15 +195,14 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                     parking_spaces: '',
                     images: []
                 });
-                // Reset location hierarchy
-                setSelectedRegion('');
-                setSelectedProvince('');
-                setSelectedDistrict('');
-                setSelectedLLG('');
-                setSelectedCompound('');
+            } else {
+                setErrorMessage(data.message || 'Failed to create property. Please try again.');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error creating property:', error);
+            setErrorMessage(error.message || 'Network error creating property');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -141,165 +215,392 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1000,
-            backdropFilter: 'blur(4px)'
+            backdropFilter: 'blur(6px)',
+            padding: '1rem'
         }}>
             <div style={{
                 backgroundColor: 'white',
-                borderRadius: '24px',
+                borderRadius: '20px',
                 padding: '2rem',
                 maxWidth: '850px',
-                width: '95%',
+                width: '100%',
                 maxHeight: '92vh',
                 overflowY: 'auto',
-                boxShadow: '0 25px 70px rgba(0,0,0,0.4)',
-                position: 'relative',
+                boxShadow: '0 25px 70px rgba(0,0,0,0.3)',
                 boxSizing: 'border-box'
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <h2 style={{ fontSize: '1.75rem', fontWeight: '700', color: '#0f172a', margin: 0 }}>Add New Property</h2>
+                {/* Modal Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '10px',
+                            background: '#eef2ff',
+                            color: '#4f46e5',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <Building2 size={22} />
+                        </div>
+                        <div>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
+                                Register New Property Asset
+                            </h2>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                                Add single or multi-location real estate assets to your portfolio
+                            </p>
+                        </div>
+                    </div>
                     <button
                         onClick={onClose}
                         style={{
-                            background: 'none',
+                            background: '#f1f5f9',
                             border: 'none',
                             cursor: 'pointer',
                             padding: '0.5rem',
                             color: '#64748b',
-                            borderRadius: '8px',
-                            transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#f1f5f9';
-                            e.currentTarget.style.color = '#0f172a';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = 'transparent';
-                            e.currentTarget.style.color = '#64748b';
+                            borderRadius: '8px'
                         }}
                     >
-                        <X size={24} />
+                        <X size={20} />
                     </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', boxSizing: 'border-box' }}>
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#0f172a' }}>
-                            Property Name *
-                        </label>
-                        <input
-                            type="text"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            placeholder="e.g., Harbor View Apartments"
-                            style={{
-                                width: '100%',
-                                padding: '0.875rem 1rem',
-                                borderRadius: '12px',
-                                border: '1px solid #e2e8f0',
-                                fontSize: '0.9375rem',
-                                transition: 'all 0.2s',
-                                boxSizing: 'border-box'
-                            }}
-                            onFocus={(e) => e.currentTarget.style.borderColor = primaryColor}
-                            onBlur={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
-                        />
+                {/* Error Banner */}
+                {errorMessage && (
+                    <div style={{
+                        backgroundColor: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        borderRadius: '10px',
+                        padding: '12px 16px',
+                        marginBottom: '1.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        color: '#991b1b',
+                        fontSize: '0.9rem'
+                    }}>
+                        <AlertCircle size={18} />
+                        <span>{errorMessage}</span>
                     </div>
+                )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <form onSubmit={handleCreateProperty} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {/* Basic Info */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '1rem' }}>
                         <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#0f172a' }}>
-                                Type *
+                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                                Property Name *
+                            </label>
+                            <input
+                                type="text"
+                                required
+                                value={formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                placeholder="e.g. Skyline Executive Plaza, Tower A"
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '10px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.925rem',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                                Property Type
                             </label>
                             <select
                                 value={formData.type}
                                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                                 style={{
                                     width: '100%',
-                                    padding: '0.875rem 1rem',
-                                    borderRadius: '12px',
-                                    border: '1px solid #e2e8f0',
-                                    fontSize: '0.9375rem',
-                                    boxSizing: 'border-box'
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '10px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.925rem',
+                                    boxSizing: 'border-box',
+                                    background: 'white'
                                 }}
                             >
-                                <option value="RESIDENTIAL">Residential</option>
-                                <option value="COMMERCIAL">Commercial</option>
-                                <option value="INDUSTRIAL">Industrial</option>
-                                <option value="LAND">Land</option>
+                                <option value="COMMERCIAL">Commercial Office / Retail</option>
+                                <option value="RESIDENTIAL">Residential Apartments / Villas</option>
+                                <option value="INDUSTRIAL">Industrial Warehousing</option>
+                                <option value="LAND">Development Land</option>
+                                <option value="MIXED_USE">Mixed-Use Commercial & Res.</option>
                             </select>
                         </div>
+                    </div>
 
+                    {/* Status & Listing */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                         <div>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#0f172a' }}>
-                                Status *
+                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                                Operational Status
                             </label>
                             <select
                                 value={formData.status}
                                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                                 style={{
                                     width: '100%',
-                                    padding: '0.875rem 1rem',
-                                    borderRadius: '12px',
-                                    border: '1px solid #e2e8f0',
-                                    fontSize: '0.9375rem',
-                                    boxSizing: 'border-box'
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '10px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.925rem',
+                                    boxSizing: 'border-box',
+                                    background: 'white'
                                 }}
                             >
-                                <option value="AVAILABLE">Available</option>
-                                <option value="LEASED">Leased</option>
-                                <option value="MAINTENANCE">Maintenance</option>
+                                <option value="AVAILABLE">Available for Lease</option>
+                                <option value="LEASED">Currently Leased</option>
+                                <option value="MAINTENANCE">Under Maintenance</option>
                                 <option value="SOLD">Sold</option>
                             </select>
                         </div>
+
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                                Listing Purpose
+                            </label>
+                            <select
+                                value={formData.listing_type}
+                                onChange={(e) => setFormData({ ...formData, listing_type: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '10px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.925rem',
+                                    boxSizing: 'border-box',
+                                    background: 'white'
+                                }}
+                            >
+                                <option value="LEASE">For Lease / Rental</option>
+                                <option value="SALE">For Sale</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                                Valuation / Price ({settings?.config?.locale?.currency || 'USD'})
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.sale_price}
+                                onChange={(e) => setFormData({ ...formData, sale_price: e.target.value })}
+                                placeholder="e.g. 250000"
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem 1rem',
+                                    borderRadius: '10px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.925rem',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
                     </div>
 
+                    {/* Multi-Country Location Section */}
+                    <div style={{
+                        background: '#f8fafc',
+                        padding: '1.25rem',
+                        borderRadius: '14px',
+                        border: '1px solid #e2e8f0'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700', color: '#1e293b', fontSize: '0.95rem' }}>
+                                <MapPin size={16} color="#4f46e5" />
+                                Multi-Country Location Hierarchy
+                            </div>
+                            {!showQuickLocationInput ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowQuickLocationInput(true)}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#4f46e5',
+                                        fontSize: '0.8rem',
+                                        fontWeight: '600',
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                    }}
+                                >
+                                    <Plus size={14} /> Add New Location Node
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowQuickLocationInput(false)}
+                                    style={{ background: 'transparent', border: 'none', color: '#64748b', fontSize: '0.8rem', cursor: 'pointer' }}
+                                >
+                                    Cancel
+                                </button>
+                            )}
+                        </div>
+
+                        {showQuickLocationInput && (
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '1rem' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Enter new District, City, or Metro Area name..."
+                                    value={newLocationName}
+                                    onChange={(e) => setNewLocationName(e.target.value)}
+                                    style={{
+                                        flex: 1,
+                                        padding: '0.6rem 0.85rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.85rem'
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleQuickAddLocation}
+                                    style={{
+                                        background: '#4f46e5',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.6rem 1rem',
+                                        borderRadius: '8px',
+                                        fontSize: '0.85rem',
+                                        fontWeight: '600',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    Save Location
+                                </button>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                    Assign to Location Hierarchy:
+                                </label>
+                                <select
+                                    value={selectedLocationId}
+                                    onChange={(e) => setSelectedLocationId(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.875rem',
+                                        background: 'white',
+                                        boxSizing: 'border-box'
+                                    }}
+                                >
+                                    {locations.map(loc => (
+                                        <option key={loc.id} value={loc.id}>
+                                            📍 {loc.name} {loc.type ? `(${loc.type})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                    Country:
+                                </label>
+                                <select
+                                    value={formData.country}
+                                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.875rem',
+                                        background: 'white',
+                                        boxSizing: 'border-box'
+                                    }}
+                                >
+                                    {GLOBAL_COUNTRIES.map(c => (
+                                        <option key={c} value={c}>{c}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                    State / Province / Region:
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.province}
+                                    onChange={(e) => setFormData({ ...formData, province: e.target.value })}
+                                    placeholder="e.g. New York, California, Greater London"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.875rem',
+                                        boxSizing: 'border-box'
+                                    }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                    City / District:
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.district}
+                                    onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                                    placeholder="e.g. Manhattan, Westminster, Sydney CBD"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.875rem',
+                                        boxSizing: 'border-box'
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                Street Address:
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.address}
+                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                placeholder="Full physical street address, suite, or building number..."
+                                style={{
+                                    width: '100%',
+                                    padding: '0.65rem 0.85rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.875rem',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* GPS Coordinates Picker */}
                     <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#0f172a' }}>
-                            Address
-                        </label>
-                        <input
-                            type="text"
-                            value={formData.address}
-                            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                            placeholder="Street address, suburb, etc."
-                            style={{
-                                width: '100%',
-                                padding: '0.875rem 1rem',
-                                borderRadius: '12px',
-                                border: '1px solid #e2e8f0',
-                                fontSize: '0.9375rem',
-                                boxSizing: 'border-box'
-                            }}
-                        />
-                    </div>
-
-                    {/* Location Hierarchy */}
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: '600', color: '#0f172a', marginBottom: '1rem' }}>📍 Location Details</h3>
-                        <LocationHierarchy
-                            selectedRegion={selectedRegion}
-                            selectedProvince={selectedProvince}
-                            selectedDistrict={selectedDistrict}
-                            selectedLLG={selectedLLG}
-                            selectedCompound={selectedCompound}
-                            onRegionChange={setSelectedRegion}
-                            onProvinceChange={setSelectedProvince}
-                            onDistrictChange={setSelectedDistrict}
-                            onLLGChange={setSelectedLLG}
-                            onCompoundChange={setSelectedCompound}
-                            primaryColor={primaryColor}
-                        />
-                    </div>
-
-                    {/* GPS Picker Component */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '700', color: '#0f172a' }}>
-                            📍 GPS Location
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                            📍 GPS Map Coordinates
                         </label>
                         <GPSPicker
                             latitude={formData.latitude}
@@ -309,87 +610,162 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                         />
                     </div>
 
+                    {/* Building Specifications */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                Floor Count
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.floor_count}
+                                onChange={(e) => setFormData({ ...formData, floor_count: e.target.value })}
+                                placeholder="e.g. 5"
+                                style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                Parking Spaces
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.parking_spaces}
+                                onChange={(e) => setFormData({ ...formData, parking_spaces: e.target.value })}
+                                placeholder="e.g. 20"
+                                style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                Land Area (sqm)
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.landArea}
+                                onChange={(e) => setFormData({ ...formData, landArea: e.target.value })}
+                                placeholder="e.g. 1200"
+                                style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.3rem', fontSize: '0.8rem', fontWeight: '600', color: '#475569' }}>
+                                Year Built
+                            </label>
+                            <input
+                                type="number"
+                                value={formData.yearBuilt}
+                                onChange={(e) => setFormData({ ...formData, yearBuilt: e.target.value })}
+                                placeholder="e.g. 2022"
+                                style={{ width: '100%', padding: '0.65rem', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Description */}
                     <div>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#0f172a' }}>
-                            Description
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                            Property Description & Features
                         </label>
                         <textarea
+                            rows={3}
                             value={formData.description}
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                            placeholder="Property details and highlights..."
-                            rows={3}
+                            placeholder="Key features, amenities, accessibility, security, backup power..."
                             style={{
                                 width: '100%',
-                                padding: '0.875rem 1rem',
-                                borderRadius: '12px',
-                                border: '1px solid #e2e8f0',
-                                fontSize: '0.9375rem',
-                                fontFamily: 'inherit',
-                                resize: 'vertical',
+                                padding: '0.75rem 1rem',
+                                borderRadius: '10px',
+                                border: '1px solid #cbd5e1',
+                                fontSize: '0.875rem',
                                 boxSizing: 'border-box'
                             }}
                         />
                     </div>
 
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9375rem', fontWeight: '600', color: '#0f172a' }}>
-                            Property Images
+                    {/* Image Upload */}
+                    <div>
+                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
+                            Property Gallery Images
                         </label>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                             {formData.images.map((img, idx) => (
-                                <img key={idx} src={img} alt="Property" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                                <img
+                                    key={idx}
+                                    src={img}
+                                    alt="Property"
+                                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                                />
                             ))}
                             <label style={{
-                                width: '80px', height: '80px', border: '2px dashed #cbd5e1', borderRadius: '8px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backgroundColor: '#f8fafc'
+                                width: '80px',
+                                height: '80px',
+                                border: '2px dashed #cbd5e1',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                backgroundColor: '#f8fafc'
                             }}>
-                                <Upload size={24} color="#94a3b8" />
+                                <Upload size={20} color="#94a3b8" />
                                 <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} disabled={uploading} />
                             </label>
                         </div>
-                        {uploading && <p style={{ fontSize: '0.8rem', marginTop: '5px', color: primaryColor }}>Uploading...</p>}
+                        {uploading && <p style={{ fontSize: '0.8rem', color: '#4f46e5', margin: '4px 0 0 0' }}>Uploading image...</p>}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
+                    {/* Modal Footer Actions */}
+                    <div style={{ display: 'flex', gap: '1rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
                         <button
+                            type="button"
                             onClick={onClose}
                             style={{
                                 flex: 1,
-                                padding: '1rem',
-                                borderRadius: '12px',
-                                border: '1px solid #e2e8f0',
+                                padding: '0.85rem',
+                                borderRadius: '10px',
+                                border: '1px solid #cbd5e1',
                                 backgroundColor: 'white',
-                                color: '#64748b',
+                                color: '#475569',
                                 fontWeight: '600',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s'
+                                cursor: 'pointer'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
                         >
                             Cancel
                         </button>
                         <button
-                            onClick={handleCreateProperty}
+                            type="submit"
+                            disabled={submitting}
                             style={{
-                                flex: 1,
-                                padding: '1rem',
-                                borderRadius: '12px',
+                                flex: 2,
+                                padding: '0.85rem',
+                                borderRadius: '10px',
                                 border: 'none',
-                                background: `linear-gradient(135deg, ${primaryColor} 0%, #764ba2 100%)`, // Using primaryColor but keeping gradient flair
+                                background: submitting ? '#94a3b8' : primaryColor,
                                 color: 'white',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)'
+                                fontWeight: '700',
+                                cursor: submitting ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                boxShadow: '0 4px 12px rgba(79, 70, 229, 0.3)'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                         >
-                            Create Property
+                            {submitting ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    Creating Property...
+                                </>
+                            ) : (
+                                <>
+                                    <Plus size={18} />
+                                    Save & Create Property
+                                </>
+                            )}
                         </button>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     );

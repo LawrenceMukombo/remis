@@ -78,7 +78,7 @@ const PlaceholderPage: React.FC<PlaceholderPageProps> = ({ title, description, f
 
                 <div style={{ marginTop: '2rem' }}>
                     <span style={{
-                        inlineBlock: 'block',
+                        display: 'inline-block',
                         padding: '0.5rem 1rem',
                         backgroundColor: '#fef3c7',
                         color: '#92400e',

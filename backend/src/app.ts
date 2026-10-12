@@ -27,6 +27,8 @@ import integrationsRoutes from './routes/integrations.routes';
 import employeesRoutes from './routes/employees.routes';
 import inventoryRoutes from './routes/inventory.routes';
 import posRoutes from './routes/pos.routes';
+import blacklistRoutes from './routes/blacklist.routes';
+import marketplaceRoutes from './routes/marketplace.routes';
 import path from 'path';
 
 const app = express();
@@ -69,5 +71,7 @@ app.use('/api/security', securityRoutes);
 app.use('/api/portal', portalRoutes);
 app.use('/api/field', fieldRoutes);
 app.use('/api/integrations', integrationsRoutes);
+app.use('/api/blacklist', blacklistRoutes);
+app.use('/api/marketplace', marketplaceRoutes);
 
 export default app;

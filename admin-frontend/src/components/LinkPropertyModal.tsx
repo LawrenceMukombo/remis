@@ -152,7 +152,7 @@ const LinkPropertyModal: React.FC<LinkPropertyModalProps> = ({ isOpen, onClose, 
                                         </div>
                                         <div>
                                             <div style={{ fontWeight: '600', color: '#334155', fontSize: '0.95rem' }}>{property.name}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', items: 'center', gap: '4px' }}>
+                                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                 <MapPin size={12} /> {property.address || 'No address'}
                                             </div>
                                         </div>

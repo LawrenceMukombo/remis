@@ -10,6 +10,7 @@ import './PropertyDetailPage.css';
 
 interface Property {
     id: string;
+    tenantId?: string;
     name: string;
     type: string;
     status: string;
@@ -117,14 +118,26 @@ const PropertyDetailPage: React.FC = () => {
         fetchValuations();
     }, [id]);
 
+    const locationLabels = settings?.config?.locationLabels || {
+        1: 'Country',
+        2: 'Province',
+        3: 'District',
+        4: 'Settlement / Community'
+    };
+
     useEffect(() => {
-        if (property && isEditing) {
-            setSelectedRegion(property.region || '');
-            setSelectedProvince(property.province || '');
-            setSelectedDistrict(property.district || '');
-            setSelectedLLG(property.llg || '');
+        if (property) {
+            const h = (property as any).locationHierarchy || [];
+            const l1 = h.find((x: any) => x.level === 1)?.id || property.region || '';
+            const l2 = h.find((x: any) => x.level === 2)?.id || property.province || '';
+            const l3 = h.find((x: any) => x.level === 3)?.id || property.district || '';
+            const l4 = h.find((x: any) => x.level === 4)?.id || property.llg || '';
+            setSelectedRegion(l1);
+            setSelectedProvince(l2);
+            setSelectedDistrict(l3);
+            setSelectedLLG(l4);
         }
-    }, [isEditing, property]);
+    }, [property, isEditing]);
 
     const fetchProperty = async () => {
         try {
@@ -162,7 +175,8 @@ const PropertyDetailPage: React.FC = () => {
                     region: selectedRegion || null,
                     province: selectedProvince || null,
                     district: selectedDistrict || null,
-                    llg: selectedLLG || null
+                    llg: selectedLLG || null,
+                    locationId: selectedLLG || selectedDistrict || selectedProvince || selectedRegion || (property as any)?.locationId
                 })
             });
 
@@ -636,19 +650,19 @@ const PropertyDetailPage: React.FC = () => {
                                 {!isEditing && (
                                     <div className="info-grid">
                                         <div className="info-field">
-                                            <label className="field-label">Region</label>
+                                            <label className="field-label">{locationLabels[1] || 'Country'}</label>
                                             <div className="field-value">{property.regionName || property.region || 'N/A'}</div>
                                         </div>
                                         <div className="info-field">
-                                            <label className="field-label">Province</label>
+                                            <label className="field-label">{locationLabels[2] || 'Province'}</label>
                                             <div className="field-value">{property.provinceName || property.province || 'N/A'}</div>
                                         </div>
                                         <div className="info-field">
-                                            <label className="field-label">District</label>
+                                            <label className="field-label">{locationLabels[3] || 'District'}</label>
                                             <div className="field-value">{property.districtName || property.district || 'N/A'}</div>
                                         </div>
                                         <div className="info-field">
-                                            <label className="field-label">LLG</label>
+                                            <label className="field-label">{locationLabels[4] || 'Settlement / Area'}</label>
                                             <div className="field-value">{property.llgName || property.llg || 'N/A'}</div>
                                         </div>
                                     </div>
@@ -690,16 +704,19 @@ const PropertyDetailPage: React.FC = () => {
                                     <div>
                                         <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: '#0f172a', marginBottom: '0.75rem' }}>📍 Location Details</h3>
                                         <LocationHierarchy
+                                            tenantId={property?.tenantId || settings?.id || user.tenantId}
+                                            country={settings?.config?.country || 'Zambia'}
+                                            labels={settings?.config?.locationLabels}
                                             selectedRegion={selectedRegion}
                                             selectedProvince={selectedProvince}
                                             selectedDistrict={selectedDistrict}
                                             selectedLLG={selectedLLG}
                                             selectedCompound={selectedCompound}
-                                            onRegionChange={setSelectedRegion}
-                                            onProvinceChange={setSelectedProvince}
-                                            onDistrictChange={setSelectedDistrict}
-                                            onLLGChange={setSelectedLLG}
-                                            onCompoundChange={setSelectedCompound}
+                                            onRegionChange={(id) => setSelectedRegion(id)}
+                                            onProvinceChange={(id) => setSelectedProvince(id)}
+                                            onDistrictChange={(id) => setSelectedDistrict(id)}
+                                            onLLGChange={(id) => setSelectedLLG(id)}
+                                            onCompoundChange={(id) => setSelectedCompound(id)}
                                             primaryColor={primaryColor}
                                         />
                                     </div>

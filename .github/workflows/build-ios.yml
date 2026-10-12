@@ -1,0 +1,66 @@
+name: Build iOS App (REMIS)
+
+on:
+  workflow_dispatch: # Allows manual one-click trigger anytime from the GitHub Actions tab
+  push:
+    branches: [ main ]
+    paths:
+      - 'client-frontend/**'
+
+jobs:
+  build-ios:
+    name: Compile REMIS iOS App on macOS Cloud Runner
+    runs-on: macos-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: client-frontend/package-lock.json
+
+      - name: 3. Install Client Frontend Dependencies
+        working-directory: client-frontend
+        run: npm ci
+
+      - name: 4. Build Production Web Assets
+        working-directory: client-frontend
+        run: npm run build
+
+      - name: 5. Sync Capacitor iOS Project
+        working-directory: client-frontend
+        run: npx cap sync ios
+
+      - name: 6. Select Active Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app
+
+      - name: 7. Compile iOS App via xcodebuild
+        working-directory: client-frontend/ios/App
+        run: |
+          xcodebuild -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/App.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: 8. Package Payload into .ipa Archive
+        working-directory: client-frontend/ios/App
+        run: |
+          mkdir -p build/Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app build/Payload/
+          cd build && zip -r REMIS-iOS-unsigned.ipa Payload
+
+      - name: 9. Upload Compiled iOS App (.ipa)
+        uses: actions/upload-artifact@v4
+        with:
+          name: REMIS-iOS-App
+          path: client-frontend/ios/App/build/REMIS-iOS-unsigned.ipa
+          retention-days: 14

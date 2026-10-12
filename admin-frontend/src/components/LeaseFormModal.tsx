@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, DollarSign, Building, User } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
+import { useSettings } from '../context/SettingsContext';
 
 interface LeaseFormModalProps {
     isOpen: boolean;
@@ -35,8 +36,9 @@ const LeaseFormModal: React.FC<LeaseFormModalProps> = ({ isOpen, onClose, onSucc
         status: 'ACTIVE'
     });
 
+    const { settings } = useSettings();
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    const tenantId = user.tenantId;
+    const tenantId = settings?.id || user.tenantId;
     const { showToast } = useToast();
 
     const [isLoadingDependencies, setIsLoadingDependencies] = useState(false);
@@ -84,8 +86,8 @@ const LeaseFormModal: React.FC<LeaseFormModalProps> = ({ isOpen, onClose, onSucc
             const rentersData = await rentersRes.json();
 
             // Handle potential different response structures (e.g. { properties: [...] } vs [...])
-            const loadedProperties = Array.isArray(propsData) ? propsData : (propsData.properties || []);
-            const loadedRenters = Array.isArray(rentersData) ? rentersData : (rentersData.renters || []);
+            const loadedProperties = Array.isArray(propsData) ? propsData : (propsData.properties || propsData.data || []);
+            const loadedRenters = Array.isArray(rentersData) ? rentersData : (rentersData.renters || rentersData.data || []);
 
             setProperties(loadedProperties);
             setRenters(loadedRenters);

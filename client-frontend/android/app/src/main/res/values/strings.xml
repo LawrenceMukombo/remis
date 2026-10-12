@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">REMIS</string>
+    <string name="title_activity_main">REMIS</string>
+    <string name="package_name">com.remis.app</string>
+    <string name="custom_url_scheme">com.remis.app</string>
+</resources>

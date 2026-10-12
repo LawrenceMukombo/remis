@@ -40,6 +40,6 @@ export default defineConfig({
         include: ['react-leaflet', 'leaflet']
     },
     server: {
-        port: 5173
+        port: 5175
     }
 })

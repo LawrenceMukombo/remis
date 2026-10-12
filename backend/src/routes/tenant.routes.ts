@@ -1,13 +1,14 @@
-
 import { Router } from 'express';
-import { getSettings, updateSettings } from '../controllers/tenant.controller';
+import { getSettings, updateSettings, listTenants, createTenant } from '../controllers/tenant.controller';
 
 const router = Router();
 
-// Public route to get config (for login page etc)
-router.get('/settings', getSettings);
+// Multi-Organization management routes
+router.get('/', listTenants);
+router.post('/', createTenant);
 
-// Protected route (TODO: Add Auth Middleware) to update settings
+// Settings routes
+router.get('/settings', getSettings);
 router.put('/settings/:tenantId', updateSettings);
 
 export default router;

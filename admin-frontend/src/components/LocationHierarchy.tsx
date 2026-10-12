@@ -12,27 +12,43 @@ interface LocationHierarchyProps {
     selectedProvince: string;
     selectedDistrict: string;
     selectedLLG: string;
-    selectedCompound: string;
-    onRegionChange: (value: string) => void;
-    onProvinceChange: (value: string) => void;
-    onDistrictChange: (value: string) => void;
-    onLLGChange: (value: string) => void;
-    onCompoundChange: (value: string) => void;
+    selectedCompound?: string;
+    onRegionChange: (value: string, name?: string) => void;
+    onProvinceChange: (value: string, name?: string) => void;
+    onDistrictChange: (value: string, name?: string) => void;
+    onLLGChange: (value: string, name?: string) => void;
+    onCompoundChange?: (value: string, name?: string) => void;
     primaryColor?: string;
+    labels?: Record<number, string>;
+    tenantId?: string;
+    country?: string;
 }
+
+const COUNTRY_DEFAULTS: Record<string, Record<number, string>> = {
+    'Zambia': { 1: 'Country', 2: 'Province', 3: 'District', 4: 'Settlement / Community' },
+    'South Africa': { 1: 'Country', 2: 'Province / County', 3: 'Municipality / City', 4: 'Township / Suburb' },
+    'Australia': { 1: 'Country', 2: 'State / Territory', 3: 'City / LGA', 4: 'Suburb / Precinct' },
+    'United States': { 1: 'Country', 2: 'State', 3: 'County / City', 4: 'Neighborhood / Locality' },
+    'United Kingdom': { 1: 'Country', 2: 'Region / County', 3: 'City / Borough', 4: 'Postal District' },
+    'Kenya': { 1: 'Country', 2: 'County', 3: 'Sub-County', 4: 'Ward / Estate' },
+    'Papua New Guinea': { 1: 'Region', 2: 'Province', 3: 'District', 4: 'LLG', 5: 'Compound / Ward' }
+};
 
 const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
     selectedRegion,
     selectedProvince,
     selectedDistrict,
     selectedLLG,
-    selectedCompound,
+    selectedCompound = '',
     onRegionChange,
     onProvinceChange,
     onDistrictChange,
     onLLGChange,
     onCompoundChange,
-    primaryColor = '#667eea'
+    primaryColor = '#667eea',
+    labels,
+    tenantId,
+    country = 'Zambia'
 }) => {
     const [regions, setRegions] = useState<Location[]>([]);
     const [provinces, setProvinces] = useState<Location[]>([]);
@@ -40,67 +56,94 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
     const [llgs, setLLGs] = useState<Location[]>([]);
     const [compounds, setCompounds] = useState<Location[]>([]);
 
-    // Fetch regions on mount
-    useEffect(() => {
-        fetchLocations(1, null, setRegions);
-    }, []);
+    // Determine country-specific hierarchy labels
+    const activeLabels: Record<number, string> = {
+        ...(country && COUNTRY_DEFAULTS[country] ? COUNTRY_DEFAULTS[country] : COUNTRY_DEFAULTS['Zambia']),
+        ...(labels || {})
+    };
 
-    // Fetch provinces when region changes
+    const hasLevel5 = Boolean(activeLabels[5] || compounds.length > 0);
+
+    const getResolvedId = (list: Location[], val: string): string | null => {
+        if (!val) return null;
+        const found = list.find(item => item.id === val || item.name.toLowerCase() === val.toLowerCase());
+        return found ? found.id : val;
+    };
+
+    // Helper: fetch locations from API
+    const fetchLocations = async (level: number, parentId: string | null): Promise<Location[]> => {
+        try {
+            const params = new URLSearchParams();
+            params.append('level', level.toString());
+            if (parentId) params.append('parentId', parentId);
+            if (tenantId) params.append('tenantId', tenantId);
+            if (country && level === 1) params.append('country', country);
+
+            const res = await fetch(`http://localhost:4000/api/locations?${params}`);
+            const data = await res.json();
+            return Array.isArray(data) ? data : [];
+        } catch (error) {
+            console.error(`Error fetching locations for level ${level}:`, error);
+            return [];
+        }
+    };
+
+    // 1. Fetch Level 1 (Country/Root) on mount or tenantId/country change
     useEffect(() => {
-        if (selectedRegion) {
-            fetchLocations(2, selectedRegion, setProvinces);
+        fetchLocations(1, null).then(roots => {
+            setRegions(roots);
+            // If only 1 root exists (e.g. Zambia) and no region selected, auto-select it
+            if (roots.length === 1 && !selectedRegion) {
+                onRegionChange(roots[0].id, roots[0].name);
+            }
+        });
+    }, [tenantId, country]);
+
+    // 2. Fetch Level 2 when Level 1 changes
+    useEffect(() => {
+        const resolvedParent = getResolvedId(regions, selectedRegion);
+        if (resolvedParent) {
+            fetchLocations(2, resolvedParent).then(setProvinces);
         } else {
             setProvinces([]);
             setDistricts([]);
             setLLGs([]);
             setCompounds([]);
         }
-    }, [selectedRegion]);
+    }, [selectedRegion, regions]);
 
-    // Fetch districts when province changes
+    // 3. Fetch Level 3 when Level 2 changes
     useEffect(() => {
-        if (selectedProvince) {
-            fetchLocations(3, selectedProvince, setDistricts);
+        const resolvedParent = getResolvedId(provinces, selectedProvince);
+        if (resolvedParent) {
+            fetchLocations(3, resolvedParent).then(setDistricts);
         } else {
             setDistricts([]);
             setLLGs([]);
             setCompounds([]);
         }
-    }, [selectedProvince]);
+    }, [selectedProvince, provinces]);
 
-    // Fetch LLGs when district changes
+    // 4. Fetch Level 4 when Level 3 changes
     useEffect(() => {
-        if (selectedDistrict) {
-            fetchLocations(4, selectedDistrict, setLLGs);
+        const resolvedParent = getResolvedId(districts, selectedDistrict);
+        if (resolvedParent) {
+            fetchLocations(4, resolvedParent).then(setLLGs);
         } else {
             setLLGs([]);
             setCompounds([]);
         }
-    }, [selectedDistrict]);
+    }, [selectedDistrict, districts]);
 
-    // Fetch compounds when LLG changes
+    // 5. Fetch Level 5 when Level 4 changes (if applicable)
     useEffect(() => {
-        if (selectedLLG) {
-            fetchLocations(5, selectedLLG, setCompounds);
+        const resolvedParent = getResolvedId(llgs, selectedLLG);
+        if (resolvedParent && hasLevel5) {
+            fetchLocations(5, resolvedParent).then(setCompounds);
         } else {
             setCompounds([]);
         }
-    }, [selectedLLG]);
-
-    const fetchLocations = async (level: number, parentId: string | null, setter: React.Dispatch<React.SetStateAction<Location[]>>) => {
-        try {
-            const params = new URLSearchParams();
-            params.append('level', level.toString());
-            if (parentId) params.append('parentId', parentId);
-
-            const res = await fetch(`http://localhost:4000/api/locations?${params}`);
-            const data = await res.json();
-            setter(data || []);
-        } catch (error) {
-            console.error(`Error fetching locations for level ${level}:`, error);
-            setter([]);
-        }
-    };
+    }, [selectedLLG, llgs, hasLevel5]);
 
     const selectStyle: React.CSSProperties = {
         width: '100%',
@@ -115,12 +158,30 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
         boxSizing: 'border-box'
     };
 
-    const labelStyle = {
-        display: 'block',
+    const labelStyle: React.CSSProperties = {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: '0.5rem',
         fontSize: '0.875rem',
-        fontWeight: '600' as const,
+        fontWeight: 600,
         color: '#0f172a'
+    };
+
+    const badgeStyle: React.CSSProperties = {
+        fontSize: '0.7rem',
+        fontWeight: 500,
+        color: '#64748b',
+        background: '#f1f5f9',
+        padding: '1px 6px',
+        borderRadius: '4px'
+    };
+
+    // Value matching helper to match either ID or name in current option list
+    const getSelectValue = (list: Location[], currentVal: string) => {
+        if (!currentVal) return '';
+        const match = list.find(item => item.id === currentVal || item.name.toLowerCase() === currentVal.toLowerCase());
+        return match ? match.id : currentVal;
     };
 
     return (
@@ -131,21 +192,26 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
             width: '100%',
             boxSizing: 'border-box'
         }}>
-            {/* Region */}
+            {/* Level 1: Country / Root */}
             <div>
-                <label style={labelStyle}>Region</label>
+                <label style={labelStyle}>
+                    <span>{activeLabels[1] || 'Country'}</span>
+                    <span style={badgeStyle}>Level 1</span>
+                </label>
                 <select
-                    value={selectedRegion}
+                    value={getSelectValue(regions, selectedRegion)}
                     onChange={(e) => {
-                        onRegionChange(e.target.value);
-                        onProvinceChange('');
-                        onDistrictChange('');
-                        onLLGChange('');
-                        onCompoundChange('');
+                        const val = e.target.value;
+                        const item = regions.find(r => r.id === val);
+                        onRegionChange(val, item?.name);
+                        onProvinceChange('', '');
+                        onDistrictChange('', '');
+                        onLLGChange('', '');
+                        if (onCompoundChange) onCompoundChange('', '');
                     }}
                     style={selectStyle}
                 >
-                    <option value="">Select Region</option>
+                    <option value="">Select {activeLabels[1] || 'Country'}</option>
                     {regions.map(region => (
                         <option key={region.id} value={region.id}>
                             {region.name}
@@ -154,25 +220,30 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
                 </select>
             </div>
 
-            {/* Province */}
+            {/* Level 2: Province / State */}
             <div>
-                <label style={labelStyle}>Province</label>
+                <label style={labelStyle}>
+                    <span>{activeLabels[2] || 'Province'}</span>
+                    <span style={badgeStyle}>Level 2</span>
+                </label>
                 <select
-                    value={selectedProvince}
+                    value={getSelectValue(provinces, selectedProvince)}
                     onChange={(e) => {
-                        onProvinceChange(e.target.value);
-                        onDistrictChange('');
-                        onLLGChange('');
-                        onCompoundChange('');
+                        const val = e.target.value;
+                        const item = provinces.find(p => p.id === val);
+                        onProvinceChange(val, item?.name);
+                        onDistrictChange('', '');
+                        onLLGChange('', '');
+                        if (onCompoundChange) onCompoundChange('', '');
                     }}
-                    disabled={!selectedRegion}
+                    disabled={!selectedRegion || provinces.length === 0}
                     style={{
                         ...selectStyle,
-                        opacity: !selectedRegion ? 0.5 : 1,
-                        cursor: !selectedRegion ? 'not-allowed' : 'pointer'
+                        opacity: (!selectedRegion || provinces.length === 0) ? 0.5 : 1,
+                        cursor: (!selectedRegion || provinces.length === 0) ? 'not-allowed' : 'pointer'
                     }}
                 >
-                    <option value="">Select Province</option>
+                    <option value="">Select {activeLabels[2] || 'Province'}</option>
                     {provinces.map(province => (
                         <option key={province.id} value={province.id}>
                             {province.name}
@@ -181,24 +252,29 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
                 </select>
             </div>
 
-            {/* District */}
+            {/* Level 3: District / City */}
             <div>
-                <label style={labelStyle}>District</label>
+                <label style={labelStyle}>
+                    <span>{activeLabels[3] || 'District'}</span>
+                    <span style={badgeStyle}>Level 3</span>
+                </label>
                 <select
-                    value={selectedDistrict}
+                    value={getSelectValue(districts, selectedDistrict)}
                     onChange={(e) => {
-                        onDistrictChange(e.target.value);
-                        onLLGChange('');
-                        onCompoundChange('');
+                        const val = e.target.value;
+                        const item = districts.find(d => d.id === val);
+                        onDistrictChange(val, item?.name);
+                        onLLGChange('', '');
+                        if (onCompoundChange) onCompoundChange('', '');
                     }}
-                    disabled={!selectedProvince}
+                    disabled={!selectedProvince || districts.length === 0}
                     style={{
                         ...selectStyle,
-                        opacity: !selectedProvince ? 0.5 : 1,
-                        cursor: !selectedProvince ? 'not-allowed' : 'pointer'
+                        opacity: (!selectedProvince || districts.length === 0) ? 0.5 : 1,
+                        cursor: (!selectedProvince || districts.length === 0) ? 'not-allowed' : 'pointer'
                     }}
                 >
-                    <option value="">Select District</option>
+                    <option value="">Select {activeLabels[3] || 'District'}</option>
                     {districts.map(district => (
                         <option key={district.id} value={district.id}>
                             {district.name}
@@ -207,23 +283,28 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
                 </select>
             </div>
 
-            {/* LLG */}
-            <div>
-                <label style={labelStyle}>LLG</label>
+            {/* Level 4: Settlement / Community / Suburb */}
+            <div style={{ gridColumn: hasLevel5 ? 'auto' : 'span 2' }}>
+                <label style={labelStyle}>
+                    <span>{activeLabels[4] || 'Settlement / Community'}</span>
+                    <span style={badgeStyle}>Level 4</span>
+                </label>
                 <select
-                    value={selectedLLG}
+                    value={getSelectValue(llgs, selectedLLG)}
                     onChange={(e) => {
-                        onLLGChange(e.target.value);
-                        onCompoundChange('');
+                        const val = e.target.value;
+                        const item = llgs.find(l => l.id === val);
+                        onLLGChange(val, item?.name);
+                        if (onCompoundChange) onCompoundChange('', '');
                     }}
-                    disabled={!selectedDistrict}
+                    disabled={!selectedDistrict || llgs.length === 0}
                     style={{
                         ...selectStyle,
-                        opacity: !selectedDistrict ? 0.5 : 1,
-                        cursor: !selectedDistrict ? 'not-allowed' : 'pointer'
+                        opacity: (!selectedDistrict || llgs.length === 0) ? 0.5 : 1,
+                        cursor: (!selectedDistrict || llgs.length === 0) ? 'not-allowed' : 'pointer'
                     }}
                 >
-                    <option value="">Select LLG</option>
+                    <option value="">Select {activeLabels[4] || 'Settlement / Community'}</option>
                     {llgs.map(llg => (
                         <option key={llg.id} value={llg.id}>
                             {llg.name}
@@ -232,27 +313,36 @@ const LocationHierarchy: React.FC<LocationHierarchyProps> = ({
                 </select>
             </div>
 
-            {/* Compound/Suburb */}
-            <div style={{ gridColumn: 'span 2' }}>
-                <label style={labelStyle}>Compound/Suburb</label>
-                <select
-                    value={selectedCompound}
-                    onChange={(e) => onCompoundChange(e.target.value)}
-                    disabled={!selectedLLG}
-                    style={{
-                        ...selectStyle,
-                        opacity: !selectedLLG ? 0.5 : 1,
-                        cursor: !selectedLLG ? 'not-allowed' : 'pointer'
-                    }}
-                >
-                    <option value="">Select Compound</option>
-                    {compounds.map(compound => (
-                        <option key={compound.id} value={compound.id}>
-                            {compound.name}
-                        </option>
-                    ))}
-                </select>
-            </div>
+            {/* Level 5: Optional (e.g. PNG Ward/Compound) */}
+            {hasLevel5 && (
+                <div style={{ gridColumn: 'span 2' }}>
+                    <label style={labelStyle}>
+                        <span>{activeLabels[5] || 'Compound / Suburb'}</span>
+                        <span style={badgeStyle}>Level 5</span>
+                    </label>
+                    <select
+                        value={getSelectValue(compounds, selectedCompound)}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            const item = compounds.find(c => c.id === val);
+                            if (onCompoundChange) onCompoundChange(val, item?.name);
+                        }}
+                        disabled={!selectedLLG || compounds.length === 0}
+                        style={{
+                            ...selectStyle,
+                            opacity: (!selectedLLG || compounds.length === 0) ? 0.5 : 1,
+                            cursor: (!selectedLLG || compounds.length === 0) ? 'not-allowed' : 'pointer'
+                        }}
+                    >
+                        <option value="">Select {activeLabels[5] || 'Compound / Suburb'}</option>
+                        {compounds.map(compound => (
+                            <option key={compound.id} value={compound.id}>
+                                {compound.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
         </div>
     );
 };

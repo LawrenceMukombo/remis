@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link2, Power, Settings } from 'lucide-react';
+import { Link2, Power, Settings, CheckCircle } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
 import './IntegrationsPage.css';
 

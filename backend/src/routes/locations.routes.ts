@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { getLocations, getHierarchy, getLocationById, createLocation, updateLocation, deleteLocation, bulkCreateLocations } from '../controllers/locations.controller';
+import { getLocations, getHierarchy, getLocationById, createLocation, updateLocation, deleteLocation, bulkCreateLocations, seedZambiaLocations } from '../controllers/locations.controller';
 
 const router = Router();
 
 router.get('/', getLocations);
 router.get('/hierarchy', getHierarchy);
 router.post('/bulk', bulkCreateLocations);
+router.post('/seed-zambia', seedZambiaLocations);
 router.get('/:id', getLocationById);
 router.post('/', createLocation);
 router.put('/:id', updateLocation);

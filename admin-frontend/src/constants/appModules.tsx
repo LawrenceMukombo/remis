@@ -12,7 +12,7 @@ export const MODULE_GROUPS = [
         title: 'Core Real Estate',
         modules: [
             { id: 'properties', path: '/properties', label: 'Properties', desc: 'Core Property & Asset Management', icon: Home },
-            { id: 'leases', path: '/leases', label: 'Leases', desc: 'Lease & Contract Management', icon: FileBarChart },
+            { id: 'leases', path: '/leases', label: 'Rentals & Leases', desc: 'Rentals, Leases & Tenant Management', icon: FileBarChart },
             { id: 'sales', path: '/sales', label: 'Sales', desc: 'Property Sales & Disposition', icon: ShoppingCart },
             { id: 'landlords', path: '/landlords', label: 'Landlords', desc: 'Landlord & Ownership Management', icon: Users },
         ]
@@ -46,6 +46,7 @@ export const MODULE_GROUPS = [
         modules: [
             { id: 'strategy', path: '/strategy', label: 'Portfolio Strategy', desc: 'Portfolio Planning & Investment', icon: Building2 },
             { id: 'compliance', path: '/compliance', label: 'Compliance', desc: 'Risk, Audit & Compliance', icon: FileBarChart },
+            { id: 'verification', path: '/verification', label: 'Deed Audit & Anti-Scam', desc: 'Ownership Proof Audits & Scammer Blacklist', icon: Shield },
             { id: 'documents', path: '/documents', label: 'Documents', desc: 'Document Management (DMS)', icon: FileText },
             { id: 'contracts', path: '/contracts', label: 'Contracts', desc: 'Contract Lifecycle Management', icon: FileBarChart },
             { id: 'trust', path: '/trust', label: 'Digital Trust', desc: 'Digital Signatures & Identity', icon: Shield },

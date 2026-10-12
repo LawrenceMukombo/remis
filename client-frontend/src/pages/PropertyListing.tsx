@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, ZoomControl, ScaleControl, LayersControl } from 'react-leaflet';
-import { Search, MapPin, SlidersHorizontal, Building2, Home, Navigation, LayoutGrid, List, Crosshair, Layers, Maximize, Eye, Factory, LandPlot, Trees, Key, Tag } from 'lucide-react';
+import { Search, MapPin, SlidersHorizontal, Building2, Home, Navigation, LayoutGrid, List, Crosshair, Layers, Maximize, Eye, Factory, LandPlot, Trees, Key, Tag, ShieldCheck, ShieldAlert, PlusCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -42,6 +42,8 @@ interface Property {
   longitude?: number;
   images: string[];
   location?: { name: string };
+  isVerified?: boolean;
+  verificationBadge?: string;
 }
 
 const getPropertyTypeIcon = (type: string, size = 18) => {
@@ -113,21 +115,56 @@ const MapActions = ({ properties }: { properties: Property[] }) => {
   );
 };
 
-const PropertyMap: React.FC<{ properties: Property[], center: [number, number], navigate: any }> = ({ properties, center, navigate }) => {
+const AutoFitBounds: React.FC<{ properties: Property[] }> = ({ properties }) => {
+  const map = useMap();
+  useEffect(() => {
+    const validCoords = properties
+      .filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number' && !isNaN(p.latitude) && !isNaN(p.longitude))
+      .map(p => [p.latitude!, p.longitude!] as [number, number]);
+
+    if (validCoords.length > 0) {
+      const bounds = L.latLngBounds(validCoords);
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+      }
+    }
+  }, [properties, map]);
+
+  return null;
+};
+
+const HoverPanController: React.FC<{ properties: Property[], hoveredId: string | null }> = ({ properties, hoveredId }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!hoveredId) return;
+    const prop = properties.find(p => p.id === hoveredId);
+    if (prop && typeof prop.latitude === 'number' && typeof prop.longitude === 'number' && !isNaN(prop.latitude) && !isNaN(prop.longitude)) {
+      map.panTo([prop.latitude, prop.longitude], { animate: true, duration: 0.8 });
+    }
+  }, [hoveredId, properties, map]);
+
+  return null;
+};
+
+const PropertyMap: React.FC<{ properties: Property[], center: [number, number], navigate: any, hoveredId: string | null }> = ({ properties, center, navigate, hoveredId }) => {
   return (
     <div className="map-relative-wrapper">
       <MapContainer
+        key={center.join(',')}
         center={center}
         zoom={13}
         className="leaflet-container-portal"
         scrollWheelZoom={true}
         zoomControl={false}
       >
+        <AutoFitBounds properties={properties} />
+        <HoverPanController properties={properties} hoveredId={hoveredId} />
         <LayersControl position="topright">
-          <LayersControl.BaseLayer checked name="Modern Street">
+          <LayersControl.BaseLayer checked name="CARTO Voyager">
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_2wxx_1_19a2e48a7de2e23331436131"
+              subdomains={['a', 'b', 'c', 'd']}
             />
           </LayersControl.BaseLayer>
           <LayersControl.BaseLayer name="Satellite View">
@@ -139,7 +176,14 @@ const PropertyMap: React.FC<{ properties: Property[], center: [number, number], 
           <LayersControl.BaseLayer name="Dark Theme">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2wxx_1_19a2e48a7de2e23331436131"
+              subdomains={['a', 'b', 'c', 'd']}
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="OpenStreetMap">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
           </LayersControl.BaseLayer>
         </LayersControl>
@@ -271,9 +315,9 @@ const PropertyListing: React.FC = () => {
         ...(filters.minPrice && { minPrice: filters.minPrice }),
         ...(filters.maxPrice && { maxPrice: filters.maxPrice }),
       });
-      const res = await fetch(`${API_BASE}/properties?${params}`);
+      const res = await fetch(`${API_BASE}/marketplace/properties?${params}`);
       const data = await res.json();
-      setProperties(data.properties || []);
+      setProperties(data.properties || data.data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -281,7 +325,11 @@ const PropertyListing: React.FC = () => {
     }
   };
 
-  const mapCenter: [number, number] = [-9.4438, 147.1803]; // PNG Default
+  // Dynamic map center: prioritize first valid property coordinate in Zambia, fallback to Lusaka center
+  const validProps = properties.filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number' && !isNaN(p.latitude) && !isNaN(p.longitude));
+  const mapCenter: [number, number] = validProps.length > 0
+    ? [validProps[0].latitude!, validProps[0].longitude!]
+    : [-15.4167, 28.2833]; // Lusaka, Zambia Default
 
   return (
     <div className="listing-page">
@@ -392,6 +440,31 @@ const PropertyListing: React.FC = () => {
         </div>
 
         <div className="nav-right">
+          <button 
+            className="filter-btn" 
+            style={{ borderRadius: '8px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, color: '#0369a1', background: '#f0f9ff', borderColor: '#bae6fd' }}
+            onClick={() => navigate('/tenant-hub')}
+            title="Resident Self-Service Hub: Active Lease, Pay Rent, Log Repairs"
+          >
+            Tenant Hub
+          </button>
+          <button 
+            className="filter-btn" 
+            style={{ borderRadius: '8px', padding: '8px 14px', fontSize: '13px', fontWeight: 600, color: '#065f46', background: '#f0fdf4', borderColor: '#bbf7d0' }}
+            onClick={() => navigate('/landlord-hub')}
+            title="Landlord & Host Command Center: Properties, Rent Roll, Viewings"
+          >
+            Landlord Hub
+          </button>
+          <button 
+            className="list-property-btn" 
+            onClick={() => navigate('/list-property')}
+            title="List your property with anti-fraud title verification"
+          >
+            <PlusCircle size={16} />
+            <span>List Property</span>
+            <span className="verified-shield-chip"><ShieldCheck size={12} /> Verified</span>
+          </button>
           <button className="login-btn" onClick={() => window.location.href = 'http://localhost:3000/login'}>
             Sign In
           </button>
@@ -435,6 +508,12 @@ const PropertyListing: React.FC = () => {
                       )}
 
                       <div className="badge-stack">
+                        {prop.isVerified && (
+                          <div className="verified-badge-gold">
+                            <ShieldCheck size={12} />
+                            <span>VERIFIED</span>
+                          </div>
+                        )}
                         <div className="listing-badge" style={{ backgroundColor: listingInfo.color }}>
                           {listingInfo.icon}
                           {listingInfo.label}
@@ -445,7 +524,14 @@ const PropertyListing: React.FC = () => {
                       </div>
                     </div>
                     <div className="card-info">
-                      <h3 className="prop-name">{prop.name}</h3>
+                      <div className="prop-header-row">
+                        <h3 className="prop-name">{prop.name}</h3>
+                        {prop.isVerified && (
+                          <span className="shield-tag-mini" title="Verified Owner Title Deed">
+                            <ShieldCheck size={13} color="#d97706" />
+                          </span>
+                        )}
+                      </div>
                       <div className="price-label">
                         {prop.sale_price ? `K${prop.sale_price.toLocaleString()}` : 'Contact for Price'}
                       </div>
@@ -465,7 +551,7 @@ const PropertyListing: React.FC = () => {
         </section>
 
         <section className={`map-viewport ${viewMode === 'list' ? 'hidden' : ''}`}>
-          <PropertyMap properties={properties} center={mapCenter} navigate={navigate} />
+          <PropertyMap properties={properties} center={mapCenter} navigate={navigate} hoveredId={hoveredId} />
         </section>
       </main>
 
@@ -560,60 +646,176 @@ const PropertyListing: React.FC = () => {
           box-sizing: border-box;
         }
 
+        .nav-right {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .list-property-btn {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+          color: white;
+          border: 1px solid #334155;
+          padding: 0.55rem 1.15rem;
+          border-radius: 99px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+
+        .list-property-btn:hover {
+          background: #0f172a;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .verified-shield-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 3px;
+          background: rgba(245, 158, 11, 0.25);
+          color: #fbbf24;
+          border: 1px solid rgba(245, 158, 11, 0.4);
+          padding: 1px 7px;
+          border-radius: 99px;
+          font-size: 0.6875rem;
+          font-weight: 700;
+          letter-spacing: 0.3px;
+        }
+
+        .verified-badge-gold {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          color: white;
+          padding: 0.25rem 0.6rem;
+          border-radius: 4px;
+          font-size: 0.625rem;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          box-shadow: 0 2px 6px rgba(217, 119, 6, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .prop-header-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+        }
+
+        .shield-tag-mini {
+          display: inline-flex;
+          align-items: center;
+          background: #fef3c7;
+          border: 1px solid #fde68a;
+          border-radius: 50%;
+          padding: 3px;
+        }
+
         .listing-main {
           flex: 1;
           display: flex;
           position: relative;
+          height: calc(100vh - 72px);
+          max-height: calc(100vh - 72px);
+          overflow: hidden;
+          min-height: 0;
         }
 
         .results-sidebar {
-          width: 420px;
+          width: 480px;
+          min-width: 440px;
+          max-width: 520px;
+          height: 100%;
           background: white;
           border-right: 1px solid var(--border);
           display: flex;
           flex-direction: column;
           z-index: 10;
+          overflow: hidden;
+          min-height: 0;
         }
 
         .sidebar-header {
-          padding: 1.5rem;
+          padding: 1.25rem 1.5rem;
           border-bottom: 1px solid var(--border);
           display: flex;
           justify-content: space-between;
           align-items: center;
+          flex-shrink: 0;
         }
 
         .sidebar-header h2 {
-          font-size: 1.125rem;
+          font-size: 1.05rem;
           color: var(--text-muted);
-          font-weight: 500;
+          font-weight: 600;
         }
 
         .scroll-results {
           flex: 1;
-          overflow-y: auto;
-          padding: 1.5rem;
+          overflow-y: scroll;
+          overflow-x: hidden;
+          padding: 1.25rem;
           display: flex;
           flex-direction: column;
-          gap: 1.5rem;
+          gap: 1.25rem;
+          min-height: 0;
+          scrollbar-gutter: stable;
+        }
+
+        .scroll-results::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .scroll-results::-webkit-scrollbar-track {
+          background: #f1f5f9;
+          border-radius: 4px;
+        }
+
+        .scroll-results::-webkit-scrollbar-thumb {
+          background: #cbd5e1;
+          border-radius: 4px;
+        }
+
+        .scroll-results::-webkit-scrollbar-thumb:hover {
+          background: #94a3b8;
+        }
+
+        .scroll-results {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 #f1f5f9;
         }
 
         .property-card-small {
           display: flex;
-          gap: 1.25rem;
+          gap: 1rem;
           padding: 1rem;
           cursor: pointer;
           border-radius: var(--radius-lg);
+          border: 1px solid var(--border);
+          background: white;
+          box-sizing: border-box;
+          width: 100%;
+          min-width: 0;
+          transition: all 0.2s ease;
         }
 
-        .property-card-small.hovered {
+        .property-card-small.hovered, .property-card-small:hover {
           border-color: var(--primary);
-          box-shadow: var(--shadow-lg);
+          box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+          transform: translateY(-1px);
         }
 
         .card-image-box {
-          width: 140px;
-          height: 100px;
+          width: 135px;
+          height: 105px;
           flex-shrink: 0;
           border-radius: var(--radius-md);
           overflow: hidden;
@@ -664,48 +866,66 @@ const PropertyListing: React.FC = () => {
         }
 
         .type-tag {
-          display: flex;
+          display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 4px;
           background: #f1f5f9;
           color: #475569 !important;
-          padding: 4px 10px !important;
-          border-radius: 6px !important;
+          padding: 2px 8px !important;
+          border-radius: 4px !important;
+          font-size: 0.7rem !important;
           font-weight: 700 !important;
         }
 
         .card-info {
           flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          overflow: hidden;
         }
 
         .price-label {
           font-size: 0.95rem;
-          font-weight: 700;
+          font-weight: 800;
           color: var(--primary);
-          margin-bottom: 0.5rem;
+          margin-bottom: 0.35rem;
         }
 
         .prop-name {
-          font-size: 1.2rem;
-          font-weight: 800;
-          margin-bottom: 0.15rem;
-          white-space: nowrap;
+          font-size: 0.98rem;
+          font-weight: 700;
+          color: #0f172a;
+          margin: 0 0 0.25rem 0;
+          line-height: 1.35;
+          flex: 1;
+          min-width: 0;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
           overflow: hidden;
           text-overflow: ellipsis;
+          word-break: break-word;
         }
 
         .prop-addr {
-          font-size: 0.875rem;
+          font-size: 0.8rem;
           color: var(--text-muted);
           display: flex;
           align-items: center;
           gap: 4px;
-          margin-bottom: 0.75rem;
+          margin-bottom: 0.5rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
         }
 
         .prop-tags {
           display: flex;
-          gap: 0.5rem;
+          gap: 0.4rem;
+          flex-wrap: wrap;
         }
 
         .prop-tags span {

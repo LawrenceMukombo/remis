@@ -106,7 +106,7 @@ const AnalyticsPage: React.FC = () => {
                                     tickFormatter={(value) => `$${value / 1000}k`}
                                 />
                                 <Tooltip
-                                    formatter={(value: number) => formatCurrency(value)}
+                                    formatter={(value: any) => formatCurrency(Number(value) || 0)}
                                     cursor={{ fill: '#f3f4f6' }}
                                 />
                                 <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} />

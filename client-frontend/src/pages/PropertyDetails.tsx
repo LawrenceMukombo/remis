@@ -6,6 +6,7 @@ import {
   ChevronRight, Info, Home, Grid, Factory, LandPlot, Key, Tag, Phone, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ScheduleViewingModal from '../components/ScheduleViewingModal';
 
 const API_BASE = 'http://localhost:4000/api';
 
@@ -17,6 +18,7 @@ const PropertyDetails: React.FC = () => {
 
   const [isFavorited, setIsFavorited] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showViewingModal, setShowViewingModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [contactForm, setContactForm] = useState({
     name: '',
@@ -163,103 +165,220 @@ const PropertyDetails: React.FC = () => {
       </nav>
 
       <main className="details-content">
-        <section className="gallery-section">
-          <div className="main-image">
-            <img src={property.images?.[0] || 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200'} alt={property.name} />
-          </div>
-          <div className="side-images">
-            <div className="img-box"><img src={property.images?.[1] || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600'} /></div>
-            <div className="img-box"><img src={property.images?.[2] || 'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=600'} /></div>
-            <button className="all-photos-btn"><Grid size={16} /> Show all photos</button>
-          </div>
-        </section>
+        {(() => {
+          const isLand = property.type === 'LAND';
+          const isCommercial = property.type === 'COMMERCIAL';
+          const isIndustrial = property.type === 'INDUSTRIAL';
+          const isResidential = property.type === 'RESIDENTIAL' || (!isLand && !isCommercial && !isIndustrial);
+          const isSale = property.listing_type === 'SALE';
 
-        <div className="details-grid">
-          <div className="main-info">
-            <header className="info-header">
-              <div className="header-top">
-                <span className="listing-type" style={{ backgroundColor: getListingInfo(property.listing_type).color, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {getListingInfo(property.listing_type).icon}
-                  {getListingInfo(property.listing_type).label}
-                </span>
-                <span className="property-status" style={{ backgroundColor: getStatusColor(property.status) }}>{property.status}</span>
+          const galleryImages = (property.images && property.images.length > 0)
+            ? property.images
+            : (isLand
+                ? [
+                    'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200',
+                    'https://images.unsplash.com/photo-1464226184884-fa280b87c399?auto=format&fit=crop&w=600',
+                    'https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?auto=format&fit=crop&w=600'
+                  ]
+                : [
+                    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200',
+                    'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=600',
+                    'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=600'
+                  ]);
+
+          const contactPhone = property.ownerPhone || property.tenant?.phone || '+260971234567';
+          const cleanPhone = contactPhone.replace(/[^0-9]/g, '');
+          const contactOwnerName = property.ownerName || property.tenant?.name || 'Verified Owner';
+
+          return (
+            <>
+              <section className="gallery-section">
+                <div className="main-image">
+                  <img src={galleryImages[0]} alt={property.name} />
+                </div>
+                <div className="side-images">
+                  <div className="img-box"><img src={galleryImages[1] || galleryImages[0]} alt="Gallery 2" /></div>
+                  <div className="img-box"><img src={galleryImages[2] || galleryImages[0]} alt="Gallery 3" /></div>
+                  <button className="all-photos-btn"><Grid size={16} /> Show all {galleryImages.length} photos</button>
+                </div>
+              </section>
+
+              <div className="details-grid">
+                <div className="main-info">
+                  <header className="info-header">
+                    <div className="header-top">
+                      <span className="listing-type" style={{ backgroundColor: getListingInfo(property.listing_type).color, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {getListingInfo(property.listing_type).icon}
+                        {getListingInfo(property.listing_type).label}
+                      </span>
+                      <span className="property-status" style={{ backgroundColor: getStatusColor(property.status) }}>{property.status}</span>
+                    </div>
+                    <h1>{property.name}</h1>
+                    <p className="address-line"><MapPin size={18} /> {property.address}</p>
+
+                    <div className="quick-specs">
+                      <div className="spec-item">{getPropertyTypeIcon(property.type)} <span>{property.type}</span></div>
+                      {isLand && (
+                        <>
+                          <div className="spec-item"><LandPlot size={20} /> <span>{property.landArea ? `${property.landArea} sqm` : (property.specifications?.land_size ? `${property.specifications.land_size} ${property.specifications.land_size_unit || 'sqm'}` : 'Demarcated Land')}</span></div>
+                          <div className="spec-item"><ShieldCheck size={20} /> <span>{property.specifications?.title_tenure?.replace(/_/g, ' ') || 'State Leasehold Title'}</span></div>
+                        </>
+                      )}
+                      {isCommercial && (
+                        <>
+                          <div className="spec-item"><Building2 size={20} /> <span>{property.specifications?.lettable_area_sqm || property.landArea || 450} sqm Lettable</span></div>
+                          <div className="spec-item"><Grid size={20} /> <span>{property.specifications?.parking_bays ? `${property.specifications.parking_bays} Dedicated Bays` : 'On-Site Parking'}</span></div>
+                        </>
+                      )}
+                      {isIndustrial && (
+                        <>
+                          <div className="spec-item"><Factory size={20} /> <span>{property.specifications?.warehouse_area_sqm || property.landArea || 1200} sqm Warehouse</span></div>
+                          <div className="spec-item"><Grid size={20} /> <span>{property.specifications?.eaves_height_meters ? `${property.specifications.eaves_height_meters}m Eaves` : 'High Clearance'}</span></div>
+                        </>
+                      )}
+                      {isResidential && (
+                        <>
+                          <div className="spec-item"><Bed size={20} /> <span>{property.specifications?.bedrooms || 3} Bedrooms</span></div>
+                          <div className="spec-item"><Bath size={20} /> <span>{property.specifications?.bathrooms || 2} Bathrooms</span></div>
+                        </>
+                      )}
+                    </div>
+                  </header>
+
+                  <section className="description">
+                    <h3>About this property</h3>
+                    <p>{property.description || (isLand 
+                        ? 'Prime demarcated land parcel in a strategic location with surveyed boundary beacons, road accessibility, and authentic title registry documentation.'
+                        : isCommercial
+                        ? 'High-profile commercial premises featuring flexible workspace configurations, dedicated parking, and essential utility infrastructure.'
+                        : isIndustrial
+                        ? 'Heavy-duty industrial facility equipped with warehouse clear-span, truck articulation yard, and high-capacity electrical supply.'
+                        : 'Welcome to this quality property. Located in a prime neighborhood, offering comfort, security, and modern convenience.'
+                    )}</p>
+                  </section>
+
+                  <section className="features-section">
+                    <h3>Features & Specifications</h3>
+                    <div className="features-grid">
+                      {isLand && (
+                        <>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Survey Beacons in Place</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Clean Title Deed Records</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Road Frontage Access</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Power / Water Ready</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Approved Land Zoning</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Cadastral Survey Verified</div>
+                        </>
+                      )}
+                      {isCommercial && (
+                        <>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Standby Power Generator</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> High-Speed Fibre Internet</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Dedicated Customer Parking</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Passenger & Goods Elevators</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> 24/7 Security Access</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Dedicated Borehole Water</div>
+                        </>
+                      )}
+                      {isIndustrial && (
+                        <>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Superlink Truck Turning Circle</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> 3-Phase Industrial Power</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Heavy Vehicle Hardstand Yard</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Automated Roller Shutters</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Fire Hydrant & Hose System</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> 24/7 Guarded Gated Entry</div>
+                        </>
+                      )}
+                      {isResidential && (
+                        <>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> 24/7 Perimeter Security</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Backup Power / Solar Inverter</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Dedicated Borehole + Tank</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Electric Fence & Motorized Gate</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Fitted Kitchen & Amenities</div>
+                          <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Paved Driveway & Parking</div>
+                        </>
+                      )}
+                    </div>
+                  </section>
+                </div>
+
+                <aside className="booking-card premium-card sticky-card">
+                  <div className="price-box">
+                    <span className="price-value">K{property.sale_price?.toLocaleString()}</span>
+                    <span className="price-period">{property.listing_type === 'LEASE' ? '/ month' : ''}</span>
+                  </div>
+
+                  <div className="booking-form">
+                    <div className="input-group">
+                      <label>{isSale ? 'Target Acquisition Date' : 'Likely Move-in Date'}</label>
+                      <input type="date" className="booking-input" />
+                    </div>
+                    <button
+                      className="btn-primary w-full"
+                      style={{ background: `linear-gradient(135deg, ${getListingInfo(property.listing_type).color} 0%, var(--secondary) 100%)` }}
+                      onClick={() => navigate(`/apply/${id}`)}
+                    >
+                      {isSale ? 'Submit Purchase Intent' : 'Apply for Lease'}
+                      <ChevronRight size={18} />
+                    </button>
+                    
+                    <button
+                      className="btn-outline w-full mt-2"
+                      style={{ borderColor: '#0284c7', color: '#0284c7', background: '#f0f9ff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                      onClick={() => setShowViewingModal(true)}
+                    >
+                      <Calendar size={18} /> Schedule In-Person Viewing
+                    </button>
+                  </div>
+
+                  <p className="booking-footer">You won't be charged yet. This initiates your formal interest.</p>
+
+                  <div className="host-box">
+                    <div className="host-info">
+                      <h4>Managed by {contactOwnerName}</h4>
+                      <p>Verified Property Lister</p>
+                    </div>
+                    <ShieldCheck size={32} color="#10b981" />
+                  </div>
+
+                  <div className="communication-shield">
+                    <div className="shield-header">
+                      <ShieldCheck size={18} color="#10b981" />
+                      <span className="shield-title">REMIS Communication Shield Active</span>
+                    </div>
+                    <div className="shield-badge-row">
+                      <span className="shield-badge">Anti-Scam Protected</span>
+                      <span className="shield-proxy-text">
+                        {property.ownerPhone || '+260 97 ••• ••XX (REMIS Shield)'}
+                      </span>
+                    </div>
+                    <p className="shield-desc">
+                      To prevent fraud and protect deposits, communications are proxied through REMIS. Direct contact details are securely unmasked upon confirmed on-site QR viewing check-in or signed lease agreement.
+                    </p>
+                    <div className="shield-actions">
+                      <button 
+                        type="button"
+                        className="shield-action-btn inquiry"
+                        onClick={() => setShowContactModal(true)}
+                      >
+                        <MessageSquare size={15} /> Inquire via Shield
+                      </button>
+                      <button 
+                        type="button"
+                        className="shield-action-btn viewing"
+                        onClick={() => setShowViewingModal(true)}
+                      >
+                        <Calendar size={15} /> Book Viewing Pass
+                      </button>
+                    </div>
+                  </div>
+                </aside>
               </div>
-              <h1>{property.name}</h1>
-              <p className="address-line"><MapPin size={18} /> {property.address}</p>
-
-              <div className="quick-specs">
-                <div className="spec-item">{getPropertyTypeIcon(property.type)} <span>{property.type}</span></div>
-                <div className="spec-item"><Bed size={20} /> <span>3 Bedrooms</span></div>
-                <div className="spec-item"><Bath size={20} /> <span>2 Bathrooms</span></div>
-              </div>
-            </header>
-
-            <section className="description">
-              <h3>About this property</h3>
-              <p>{property.description || 'Welcome to this beautiful property. Located in a prime neighborhood, it offers a perfect blend of modern comfort and classic charm. Ideal for families looking for space and security.'}</p>
-            </section>
-
-            <section className="features-section">
-              <h3>Features & Amenities</h3>
-              <div className="features-grid">
-                <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> High Speed Internet</div>
-                <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> 24/7 Security</div>
-                <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Backup Power</div>
-                <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Air Conditioning</div>
-                <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Modern Kitchen</div>
-                <div className="feature-item"><CheckCircle2 size={18} color="#10b981" /> Parking Space</div>
-              </div>
-            </section>
-          </div>
-
-          <aside className="booking-card premium-card sticky-card">
-            <div className="price-box">
-              <span className="price-value">K{property.sale_price?.toLocaleString()}</span>
-              <span className="price-period">{property.listing_type === 'LEASE' ? '/ month' : ''}</span>
-            </div>
-
-            <div className="booking-form">
-              <div className="input-group">
-                <label>Likely Move-in Date</label>
-                <input type="date" className="booking-input" />
-              </div>
-              <button
-                className="btn-primary w-full"
-                style={{ background: `linear-gradient(135deg, ${getListingInfo(property.listing_type).color} 0%, var(--secondary) 100%)` }}
-                onClick={() => navigate(`/apply/${id}`)}
-              >
-                {property.listing_type === 'LEASE' ? 'Apply for Residency' : 'Purchase Intent'}
-                <ChevronRight size={18} />
-              </button>
-            </div>
-
-            <p className="booking-footer">You won't be charged yet. This is an application.</p>
-
-            <div className="host-box">
-              <div className="host-info">
-                <h4>Managed by {property.tenant?.name || 'REMIS Realty'}</h4>
-                <p>Responds within 24 hours</p>
-              </div>
-              <ShieldCheck size={32} color="#4f46e5" />
-            </div>
-
-            <button className="btn-outline w-full mb-4" onClick={() => setShowContactModal(true)}>
-              <MessageSquare size={18} /> Contact Manager
-            </button>
-
-            <div className="direct-connect">
-              <p className="dc-label">Direct Connect</p>
-              <div className="dc-grid">
-                <a href={`https://wa.me/67570000000?text=Hi, I am interested in ${property.name}`} target="_blank" className="dc-item wa">
-                  <MessageSquare size={16} /> WhatsApp
-                </a>
-                <a href="tel:+67570000000" className="dc-item call">
-                  <Phone size={16} /> Call
-                </a>
-              </div>
-            </div>
-          </aside>
-        </div>
+            </>
+          );
+        })()}
       </main>
 
       {/* Contact Modal */}
@@ -349,6 +468,14 @@ const PropertyDetails: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Milestone 2: Physical Viewing Schedule & QR Check-in Modal */}
+      <ScheduleViewingModal
+        property={property}
+        isOpen={showViewingModal}
+        onClose={() => setShowViewingModal(false)}
+        onProceedToLease={() => navigate(`/apply/${id}`)}
+      />
 
       <style>{`
         .details-page {
@@ -595,31 +722,98 @@ const PropertyDetails: React.FC = () => {
         .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
         .mb-4 { margin-bottom: 1rem; }
 
-        .direct-connect {
+        .communication-shield {
           margin-top: 1rem;
-          background: #f8fafc;
+          background: #f0fdf4;
           padding: 1rem;
           border-radius: 12px;
-          border: 1px dashed var(--border);
+          border: 1px solid #bbf7d0;
         }
 
-        .dc-label { font-size: 0.7rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.75rem; text-align: center; }
-        .dc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-        .dc-item {
+        .shield-header {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 0.5rem;
+        }
+
+        .shield-title {
+          font-size: 0.75rem;
+          font-weight: 800;
+          color: #166534;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+
+        .shield-badge-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: white;
+          padding: 0.35rem 0.6rem;
+          border-radius: 6px;
+          border: 1px solid #dcfce7;
+          margin-bottom: 0.5rem;
+        }
+
+        .shield-badge {
+          font-size: 0.68rem;
+          font-weight: 700;
+          color: #15803d;
+          background: #dcfce7;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+
+        .shield-proxy-text {
+          font-size: 0.72rem;
+          font-weight: 600;
+          color: #334155;
+          font-family: monospace;
+        }
+
+        .shield-desc {
+          font-size: 0.72rem;
+          color: #166534;
+          line-height: 1.35;
+          margin-bottom: 0.75rem;
+        }
+
+        .shield-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.5rem;
+        }
+
+        .shield-action-btn {
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 6px;
-          padding: 0.6rem;
-          border-radius: 8px;
-          font-size: 0.85rem;
+          gap: 5px;
+          padding: 0.55rem;
+          border-radius: 6px;
+          font-size: 0.74rem;
           font-weight: 700;
-          text-decoration: none;
-          transition: transform 0.2s;
+          cursor: pointer;
+          border: none;
+          transition: all 0.2s ease;
         }
-        .dc-item:active { transform: scale(0.95); }
-        .dc-item.wa { background: #25d366; color: white; }
-        .dc-item.call { background: #0ea5e9; color: white; }
+
+        .shield-action-btn.inquiry {
+          background: #0284c7;
+          color: white;
+        }
+        .shield-action-btn.inquiry:hover {
+          background: #0369a1;
+        }
+
+        .shield-action-btn.viewing {
+          background: #16a34a;
+          color: white;
+        }
+        .shield-action-btn.viewing:hover {
+          background: #15803d;
+        }
 
         .favorite-btn.active {
           border-color: var(--accent);

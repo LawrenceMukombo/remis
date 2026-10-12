@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Image, Upload, File, Trash2, Download, X } from 'lucide-react';
+import { FileText, Image, Upload, File, Trash2, Eye, X, Shield, Download, Lock } from 'lucide-react';
 import { useToast } from '../hooks/useToast';
+import ProtectedDocumentViewer from '../components/ProtectedDocumentViewer';
 import './DocumentsPage.css';
 
 interface Document {
@@ -18,6 +19,7 @@ const DocumentsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [viewingDoc, setViewingDoc] = useState<Document | null>(null);
 
     // Form State
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -226,25 +228,98 @@ const DocumentsPage: React.FC = () => {
                         <p>Upload files to get started.</p>
                     </div>
                 ) : (
-                    documents.map(doc => (
-                        <div key={doc.id} className="document-card">
-                            {getIcon(doc.mimeType)}
-                            <div className="document-name" title={doc.name}>{doc.name}</div>
-                            <div className="document-meta">
-                                {formatSize(doc.size)} • {new Date(doc.createdAt).toLocaleDateString()}
+                    documents.map(doc => {
+                        const typeUpper = (doc.type || '').toUpperCase();
+                        const nameLower = (doc.name || '').toLowerCase();
+                        const isSensitive = ['TITLE_DEED', 'OWNERSHIP_TITLE_DEED', 'DEED', 'ID', 'IDENTITY', 'IDENTITY_NRC', 'NRC', 'PASSPORT', 'RATES_BILL'].includes(typeUpper) || nameLower.includes('deed') || nameLower.includes('title') || nameLower.includes('nrc') || nameLower.includes('passport') || nameLower.includes('identity');
+                        const isContract = !isSensitive && (['LEASE', 'CONTRACT'].includes(typeUpper) || nameLower.includes('contract') || nameLower.includes('agreement') || nameLower.includes('lease'));
+
+                        return (
+                            <div key={doc.id} className="document-card">
+                                {getIcon(doc.mimeType)}
+                                <div className="document-name" title={doc.name}>{doc.name}</div>
+                                <div style={{ margin: '0.25rem 0' }}>
+                                    {isContract ? (
+                                        <span style={{ fontSize: '0.72rem', padding: '2px 6px', background: '#ecfdf5', color: '#065f46', borderRadius: '4px', fontWeight: 700, border: '1px solid #10b981', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            <FileText size={11} /> Contract (Download Permitted)
+                                        </span>
+                                    ) : (
+                                        <span style={{ fontSize: '0.72rem', padding: '2px 6px', background: '#fef2f2', color: '#991b1b', borderRadius: '4px', fontWeight: 700, border: '1px solid #fecaca', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                            <Lock size={11} /> Highly Protected (Readonly)
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="document-meta">
+                                    {formatSize(doc.size)} • {new Date(doc.createdAt).toLocaleDateString()}
+                                </div>
+                                <div className="document-actions">
+                                    {isContract && (
+                                        <a 
+                                            href={doc.url} 
+                                            download={doc.name} 
+                                            className="action-btn" 
+                                            title="Download Authorized Contract" 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            style={{ background: '#059669', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+                                        >
+                                            <Download size={16} />
+                                        </a>
+                                    )}
+                                    <button 
+                                        onClick={() => setViewingDoc(doc)} 
+                                        className="action-btn" 
+                                        title={isContract ? "View Contract" : "View in Protected DRM Vault (Anti-Capture)"}
+                                        style={{ background: '#0284c7', color: 'white', border: 'none' }}
+                                    >
+                                        <Eye size={16} />
+                                    </button>
+                                    <button onClick={() => handleDelete(doc.id)} className="action-btn delete" title="Delete">
+                                        <Trash2 size={16} />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="document-actions">
-                                <a href={doc.url} target="_blank" rel="noopener noreferrer" className="action-btn" title="Download/View">
-                                    <Download size={16} />
-                                </a>
-                                <button onClick={() => handleDelete(doc.id)} className="action-btn delete" title="Delete">
-                                    <Trash2 size={16} />
-                                </button>
-                            </div>
-                        </div>
-                    ))
+                        );
+                    })
                 )}
             </div>
+
+            {/* Readonly DRM Document Viewer Modal */}
+            {viewingDoc && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(2, 6, 23, 0.85)',
+                    backdropFilter: 'blur(8px)',
+                    zIndex: 2500,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2rem'
+                }}>
+                    <div style={{ width: '100%', maxWidth: '960px', height: '85vh', maxHeight: '900px' }}>
+                        {(() => {
+                            const typeUpper = (viewingDoc.type || '').toUpperCase();
+                            const nameLower = (viewingDoc.name || '').toLowerCase();
+                            const isSensitive = ['TITLE_DEED', 'OWNERSHIP_TITLE_DEED', 'DEED', 'ID', 'IDENTITY', 'IDENTITY_NRC', 'NRC', 'PASSPORT', 'RATES_BILL'].includes(typeUpper) || nameLower.includes('deed') || nameLower.includes('title') || nameLower.includes('nrc') || nameLower.includes('passport') || nameLower.includes('identity');
+                            const isContract = !isSensitive && (['LEASE', 'CONTRACT'].includes(typeUpper) || nameLower.includes('contract') || nameLower.includes('agreement') || nameLower.includes('lease'));
+
+                            return (
+                                <ProtectedDocumentViewer
+                                    title={viewingDoc.name}
+                                    documentType={viewingDoc.type}
+                                    documentUrl={viewingDoc.url}
+                                    allowDownload={isContract}
+                                    onClose={() => setViewingDoc(null)}
+                                />
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
