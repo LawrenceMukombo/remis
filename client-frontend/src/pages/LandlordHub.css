@@ -143,15 +143,27 @@
   gap: 0.6rem;
 }
 
+.landlord-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  margin-top: 1rem;
+  background: #ffffff;
+}
+
 .landlord-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
 }
 
 .landlord-table th, .landlord-table td {
-  padding: 0.85rem 1rem;
+  padding: 0.9rem 1.1rem;
   border-bottom: 1px solid #e2e8f0;
   font-size: 0.875rem;
+  vertical-align: middle;
 }
 
 .landlord-table th {
@@ -159,6 +171,277 @@
   color: #475569;
   font-weight: 700;
   text-align: left;
+  user-select: none;
+}
+
+.landlord-table th.sortable-th {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.landlord-table th.sortable-th:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.landlord-table td.cell-prop {
+  min-width: 250px;
+  max-width: 320px;
+}
+
+.landlord-table td.cell-address {
+  min-width: 200px;
+  max-width: 260px;
+  color: #64748b;
+  font-size: 0.825rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Toolbar & Utility Bar */
+.landlord-table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.toolbar-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  min-width: 240px;
+}
+
+.toolbar-search-box input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.875rem;
+  color: #0f172a;
+  width: 100%;
+}
+
+.toolbar-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #334155;
+  outline: none;
+  cursor: pointer;
+}
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* Action Buttons */
+.action-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.action-btn.preview {
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+.action-btn.preview:hover {
+  background: #e2e8f0;
+}
+
+.action-btn.edit {
+  background: #f0f9ff;
+  color: #0284c7;
+  border-color: #bae6fd;
+}
+
+.action-btn.edit:hover {
+  background: #e0f2fe;
+}
+
+.action-btn.delete {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+}
+
+.action-btn.delete:hover {
+  background: #fee2e2;
+}
+
+/* Table Pagination Footer */
+.landlord-pagination-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.pagination-size-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.825rem;
+  margin-left: 6px;
+  outline: none;
+}
+
+.pagination-nav-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-page-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.nav-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nav-page-btn:not(:disabled):hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Landlord Modal Styles */
+.landlord-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  padding: 1rem;
+}
+
+.landlord-modal-box {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 2rem;
+  max-width: 680px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+}
+
+.landlord-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.landlord-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.landlord-form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.landlord-form-group label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.landlord-form-group input,
+.landlord-form-group select,
+.landlord-form-group textarea {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #0f172a;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.landlord-form-group input:focus,
+.landlord-form-group select:focus,
+.landlord-form-group textarea:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
 }
 
 .action-chip {
@@ -194,4 +477,14 @@
   .landlord-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* Photo Gallery & Thumbnail Micro-Interactions */
+.photo-thumb-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.photo-thumb-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }

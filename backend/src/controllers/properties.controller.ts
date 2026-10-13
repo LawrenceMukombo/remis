@@ -475,14 +475,43 @@ export const deleteProperty = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
-        await prisma.property.delete({
-            where: { id }
+        const property = await prisma.property.findUnique({
+            where: { id },
+            include: {
+                leases: {
+                    where: { status: 'ACTIVE' }
+                }
+            }
         });
 
-        res.json({ message: 'Property deleted successfully' });
+        if (!property) {
+            return res.status(404).json({ success: false, message: 'Property not found' });
+        }
+
+        if (property.leases && property.leases.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: `Cannot delete property "${property.name}" because it has ${property.leases.length} active lease(s). Please terminate or archive active leases first.`
+            });
+        }
+
+        // Clean up dependent child records safely in a transaction
+        await prisma.$transaction([
+            prisma.expressionOfInterest.deleteMany({ where: { propertyId: id } }),
+            prisma.saleInterest.deleteMany({ where: { propertyId: id } }),
+            prisma.propertyValuation.deleteMany({ where: { propertyId: id } }),
+            prisma.propertyTag.deleteMany({ where: { propertyId: id } }),
+            prisma.propertyFeature.deleteMany({ where: { propertyId: id } }),
+            prisma.complianceRecord.deleteMany({ where: { propertyId: id } }),
+            prisma.maintenanceTicket.deleteMany({ where: { propertyId: id } }),
+            prisma.unit.deleteMany({ where: { propertyId: id } }),
+            prisma.property.delete({ where: { id } })
+        ]);
+
+        res.json({ success: true, message: 'Property deleted successfully' });
     } catch (error) {
         console.error('Error deleting property:', error);
-        res.status(500).json({ message: 'Server error' });
+        res.status(500).json({ success: false, message: 'Server error while deleting property', error: String(error) });
     }
 };
 

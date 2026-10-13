@@ -43,6 +43,7 @@ app.get('/', (req, res) => {
 
 // Serve uploaded files statically
 app.use(express.static('uploads'));
+app.use('/uploads', express.static('uploads'));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tenant', tenantRoutes);

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import {
     Search, MapPin, Grid, Table as TableIcon, Map as MapIcon, Plus, Building2,
-    SlidersHorizontal, Download, ArrowUpDown, ChevronLeft, ChevronRight, Eye, KeyRound, ExternalLink, ShieldCheck
+    SlidersHorizontal, Download, ArrowUpDown, ChevronLeft, ChevronRight, Eye, KeyRound, ExternalLink, ShieldCheck,
+    Edit2, Trash2, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CreatePropertyModal from '../components/CreatePropertyModal';
@@ -63,6 +64,10 @@ const PropertiesPage: React.FC = () => {
     });
     const [viewMode, setViewMode] = useState<'grid' | 'table' | 'map'>('grid');
     const [showModal, setShowModal] = useState(false);
+    const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+    const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
+    const [deleting, setDeleting] = useState<boolean>(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
     const [stats, setStats] = useState({
         totalProperties: 0,
         availableProperties: 0,
@@ -70,6 +75,39 @@ const PropertiesPage: React.FC = () => {
         propertiesForSale: 0,
         totalUnits: 0
     });
+
+    const handleEdit = (prop: Property) => {
+        setEditingProperty(prop);
+        setShowModal(true);
+    };
+
+    const handleDeleteClick = (prop: Property) => {
+        setPropertyToDelete(prop);
+        setDeleteError(null);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!propertyToDelete) return;
+        setDeleting(true);
+        setDeleteError(null);
+        try {
+            const res = await fetch(`http://localhost:4000/api/properties/${propertyToDelete.id}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setPropertyToDelete(null);
+                fetchProperties();
+                fetchStats();
+            } else {
+                setDeleteError(data.message || 'Failed to delete property.');
+            }
+        } catch (err: any) {
+            setDeleteError(err.message || 'Network error deleting property.');
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     // Enterprise Table State (Global Table Rules)
     const [sortField, setSortField] = useState<string>('name');
@@ -499,11 +537,27 @@ const PropertiesPage: React.FC = () => {
                                         <Eye size={15} /> Details
                                     </button>
                                     <button
+                                        onClick={() => handleEdit(property)}
+                                        className="card-action-btn edit-btn"
+                                        style={{ background: '#f0f9ff', color: '#0284c7', borderColor: '#bae6fd' }}
+                                        title="Edit Real Estate Property"
+                                    >
+                                        <Edit2 size={15} /> Edit
+                                    </button>
+                                    <button
                                         onClick={() => navigate(`/leases?propertyId=${property.id}`)}
                                         className="card-action-btn lease-btn"
                                         title="Manage Rentals & Leases for this property"
                                     >
-                                        <KeyRound size={15} /> Leases & Rentals
+                                        <KeyRound size={15} /> Leases
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteClick(property)}
+                                        className="card-action-btn delete-btn"
+                                        style={{ background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}
+                                        title="Delete Property"
+                                    >
+                                        <Trash2 size={15} /> Delete
                                     </button>
                                 </div>
                             </div>
@@ -662,11 +716,27 @@ const PropertiesPage: React.FC = () => {
                                                         <Eye size={15} />
                                                     </button>
                                                     <button
+                                                        onClick={() => handleEdit(property)}
+                                                        className="row-action-btn edit"
+                                                        style={{ color: '#0284c7', background: '#f0f9ff' }}
+                                                        title="Edit Property"
+                                                    >
+                                                        <Edit2 size={15} />
+                                                    </button>
+                                                    <button
                                                         onClick={() => navigate(`/leases?propertyId=${property.id}`)}
                                                         className="row-action-btn lease"
                                                         title="Manage Leases & Rentals"
                                                     >
                                                         <KeyRound size={15} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteClick(property)}
+                                                        className="row-action-btn delete"
+                                                        style={{ color: '#dc2626', background: '#fef2f2' }}
+                                                        title="Delete Property"
+                                                    >
+                                                        <Trash2 size={15} />
                                                     </button>
                                                 </div>
                                             </td>
@@ -775,15 +845,120 @@ const PropertiesPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Create Property Modal */}
+            {/* Create & Edit Property Modal */}
             <CreatePropertyModal
                 isOpen={showModal}
-                onClose={() => setShowModal(false)}
+                onClose={() => {
+                    setShowModal(false);
+                    setEditingProperty(null);
+                }}
                 onSuccess={() => {
                     fetchProperties();
                     fetchStats();
+                    setEditingProperty(null);
                 }}
+                propertyToEdit={editingProperty}
             />
+
+            {/* Delete Property Confirmation Modal */}
+            {propertyToDelete && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1100,
+                    backdropFilter: 'blur(4px)',
+                    padding: '1rem'
+                }}>
+                    <div style={{
+                        backgroundColor: '#ffffff',
+                        borderRadius: '16px',
+                        padding: '2rem',
+                        maxWidth: '480px',
+                        width: '100%',
+                        boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+                        boxSizing: 'border-box'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem', color: '#dc2626' }}>
+                            <div style={{ background: '#fef2f2', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <AlertTriangle size={24} />
+                            </div>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>Delete Property Asset?</h3>
+                                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Action cannot be reversed</span>
+                            </div>
+                        </div>
+
+                        <p style={{ color: '#475569', fontSize: '0.9rem', lineHeight: 1.5, margin: '0 0 1.25rem' }}>
+                            Are you sure you want to permanently delete <strong>{propertyToDelete.name}</strong>?
+                            All media, units, and tags associated with this property will be removed. Properties with active leases cannot be deleted.
+                        </p>
+
+                        {deleteError && (
+                            <div style={{
+                                padding: '0.75rem 1rem',
+                                borderRadius: '8px',
+                                background: '#fef2f2',
+                                border: '1px solid #fecaca',
+                                color: '#b91c1c',
+                                fontSize: '0.85rem',
+                                marginBottom: '1.25rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}>
+                                <AlertTriangle size={16} />
+                                <span>{deleteError}</span>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => {
+                                    setPropertyToDelete(null);
+                                    setDeleteError(null);
+                                }}
+                                style={{
+                                    padding: '0.7rem 1.25rem',
+                                    borderRadius: '8px',
+                                    border: '1px solid #cbd5e1',
+                                    background: '#ffffff',
+                                    color: '#475569',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                disabled={deleting}
+                                style={{
+                                    padding: '0.7rem 1.4rem',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: deleting ? '#94a3b8' : '#dc2626',
+                                    color: '#ffffff',
+                                    fontWeight: 700,
+                                    cursor: deleting ? 'not-allowed' : 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                <Trash2 size={16} />
+                                {deleting ? 'Deleting...' : 'Confirm Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

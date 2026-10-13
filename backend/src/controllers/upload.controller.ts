@@ -98,3 +98,48 @@ export const uploadFile = (req: Request, res: Response) => {
         });
     });
 };
+
+// Multi-Image Upload Configuration for Property Photos
+const uploadMultiImages = multer({
+    storage: storage,
+    limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit per photo
+    fileFilter: (req, file, cb) => {
+        const filetypes = /jpeg|jpg|png|gif|svg|webp|avif/;
+        const mimetype = filetypes.test(file.mimetype);
+        const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+        if (mimetype && extname) {
+            return cb(null, true);
+        }
+        cb(new Error('Only image files (jpeg, jpg, png, gif, svg, webp, avif) are allowed'));
+    }
+}).array('photos', 20);
+
+export const uploadPhotos = (req: Request, res: Response) => {
+    uploadMultiImages(req, res, function (err) {
+        if (err instanceof multer.MulterError) {
+            return res.status(500).json({ message: err.message });
+        } else if (err) {
+            return res.status(500).json({ message: err.message });
+        }
+
+        const files = (req.files as Express.Multer.File[]) || [];
+        if (files.length === 0) {
+            return res.status(400).json({ message: 'No photos uploaded' });
+        }
+
+        const protocol = req.protocol;
+        const host = req.get('host');
+        const urls = files.map(file => `${protocol}://${host}/${file.filename}`);
+
+        res.json({
+            urls,
+            files: files.map(file => ({
+                url: `${protocol}://${host}/${file.filename}`,
+                filename: file.filename,
+                originalName: file.originalname,
+                size: file.size,
+                mimetype: file.mimetype
+            }))
+        });
+    });
+};

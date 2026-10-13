@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Building2, MapPin, Plus, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Upload, Building2, MapPin, Plus, CheckCircle, AlertCircle, Loader2, Trash2, Star, Image as ImageIcon, Link as LinkIcon } from 'lucide-react';
 import GPSPicker from './GPSPicker';
 import { useSettings } from '../context/SettingsContext';
 
@@ -8,6 +8,7 @@ interface CreatePropertyModalProps {
     onClose: () => void;
     onSuccess: () => void;
     initialLandlordId?: string;
+    propertyToEdit?: any | null;
 }
 
 interface LocationOption {
@@ -35,7 +36,7 @@ const GLOBAL_COUNTRIES = [
     'France'
 ];
 
-const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClose, onSuccess, initialLandlordId }) => {
+const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClose, onSuccess, initialLandlordId, propertyToEdit }) => {
     const { settings } = useSettings();
     const primaryColor = settings?.config?.branding?.primaryColor || '#4f46e5';
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -69,14 +70,59 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
 
     const [submitting, setSubmitting] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [imageUrlInput, setImageUrlInput] = useState('');
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     useEffect(() => {
         if (isOpen) {
             fetchLocations();
             setErrorMessage(null);
+
+            if (propertyToEdit) {
+                setFormData({
+                    name: propertyToEdit.name || '',
+                    type: propertyToEdit.type || 'COMMERCIAL',
+                    status: propertyToEdit.status || 'AVAILABLE',
+                    address: propertyToEdit.address || '',
+                    country: propertyToEdit.region || settings?.config?.country || 'Zambia',
+                    province: propertyToEdit.province || '',
+                    district: propertyToEdit.district || '',
+                    latitude: propertyToEdit.latitude !== undefined && propertyToEdit.latitude !== null ? String(propertyToEdit.latitude) : '',
+                    longitude: propertyToEdit.longitude !== undefined && propertyToEdit.longitude !== null ? String(propertyToEdit.longitude) : '',
+                    listing_type: propertyToEdit.listing_type || 'LEASE',
+                    sale_price: propertyToEdit.sale_price !== undefined && propertyToEdit.sale_price !== null ? String(propertyToEdit.sale_price) : '',
+                    description: propertyToEdit.description || '',
+                    yearBuilt: propertyToEdit.yearBuilt !== undefined && propertyToEdit.yearBuilt !== null ? String(propertyToEdit.yearBuilt) : '',
+                    landArea: propertyToEdit.landArea !== undefined && propertyToEdit.landArea !== null ? String(propertyToEdit.landArea) : '',
+                    floor_count: propertyToEdit.floor_count !== undefined && propertyToEdit.floor_count !== null ? String(propertyToEdit.floor_count) : '',
+                    parking_spaces: propertyToEdit.parking_spaces !== undefined && propertyToEdit.parking_spaces !== null ? String(propertyToEdit.parking_spaces) : '',
+                    images: Array.isArray(propertyToEdit.images) ? propertyToEdit.images : []
+                });
+                setSelectedLocationId(propertyToEdit.locationId || propertyToEdit.location?.id || '');
+            } else {
+                setFormData({
+                    name: '',
+                    type: 'COMMERCIAL',
+                    status: 'AVAILABLE',
+                    address: '',
+                    country: settings?.config?.country || 'Zambia',
+                    province: '',
+                    district: '',
+                    latitude: '',
+                    longitude: '',
+                    listing_type: 'LEASE',
+                    sale_price: '',
+                    description: '',
+                    yearBuilt: '',
+                    landArea: '',
+                    floor_count: '',
+                    parking_spaces: '',
+                    images: []
+                });
+                setSelectedLocationId('');
+            }
         }
-    }, [isOpen]);
+    }, [isOpen, propertyToEdit]);
 
     const fetchLocations = async () => {
         try {
@@ -119,27 +165,92 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
     };
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        const uploadData = new FormData();
-        uploadData.append('file', file);
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
 
         setUploading(true);
         try {
-            const res = await fetch('http://localhost:4000/api/upload/file', {
-                method: 'POST',
-                body: uploadData
+            const uploadData = new FormData();
+            Array.from(files).forEach(file => {
+                uploadData.append('photos', file);
             });
-            const data = await res.json();
-            if (data.url) {
-                setFormData(prev => ({ ...prev, images: [...prev.images, data.url] }));
+
+            let newUrls: string[] = [];
+
+            // Attempt batch photo upload
+            try {
+                const res = await fetch('http://localhost:4000/api/upload/photos', {
+                    method: 'POST',
+                    body: uploadData
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data.urls) && data.urls.length > 0) {
+                        newUrls = data.urls;
+                    }
+                }
+            } catch (err) {
+                console.warn('Batch photo upload failed, attempting single file fallback:', err);
+            }
+
+            // Fallback to single file upload
+            if (newUrls.length === 0) {
+                for (const file of Array.from(files)) {
+                    try {
+                        const singleData = new FormData();
+                        singleData.append('file', file);
+                        const res = await fetch('http://localhost:4000/api/upload/file', {
+                            method: 'POST',
+                            body: singleData
+                        });
+                        const data = await res.json();
+                        if (data.url) newUrls.push(data.url);
+                    } catch (singleErr) {
+                        console.error('Single upload failed:', singleErr);
+                    }
+                }
+            }
+
+            if (newUrls.length > 0) {
+                setFormData(prev => ({
+                    ...prev,
+                    images: [...prev.images, ...newUrls]
+                }));
             }
         } catch (error) {
             console.error('Upload failed:', error);
         } finally {
             setUploading(false);
+            e.target.value = '';
         }
+    };
+
+    const handleAddImageUrl = () => {
+        if (!imageUrlInput.trim()) return;
+        setFormData(prev => ({
+            ...prev,
+            images: [...prev.images, imageUrlInput.trim()]
+        }));
+        setImageUrlInput('');
+    };
+
+    const handleRemoveImage = (indexToRemove: number) => {
+        setFormData(prev => ({
+            ...prev,
+            images: prev.images.filter((_, idx) => idx !== indexToRemove)
+        }));
+    };
+
+    const handleSetCoverImage = (indexToCover: number) => {
+        setFormData(prev => {
+            const current = [...prev.images];
+            if (indexToCover <= 0 || indexToCover >= current.length) return prev;
+            const [selected] = current.splice(indexToCover, 1);
+            return {
+                ...prev,
+                images: [selected, ...current]
+            };
+        });
     };
 
     const handleCreateProperty = async (e: React.FormEvent) => {
@@ -164,8 +275,13 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                 sale_price: formData.sale_price ? parseFloat(formData.sale_price) : null
             };
 
-            const res = await fetch('http://localhost:4000/api/properties', {
-                method: 'POST',
+            const url = propertyToEdit
+                ? `http://localhost:4000/api/properties/${propertyToEdit.id}`
+                : 'http://localhost:4000/api/properties';
+            const method = propertyToEdit ? 'PUT' : 'POST';
+
+            const res = await fetch(url, {
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
@@ -181,7 +297,7 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                     type: 'COMMERCIAL',
                     status: 'AVAILABLE',
                     address: '',
-                    country: settings?.config?.country || 'United States',
+                    country: settings?.config?.country || 'Zambia',
                     province: '',
                     district: '',
                     latitude: '',
@@ -196,11 +312,11 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                     images: []
                 });
             } else {
-                setErrorMessage(data.message || 'Failed to create property. Please try again.');
+                setErrorMessage(data.message || `Failed to ${propertyToEdit ? 'update' : 'create'} property. Please try again.`);
             }
         } catch (error: any) {
-            console.error('Error creating property:', error);
-            setErrorMessage(error.message || 'Network error creating property');
+            console.error(`Error ${propertyToEdit ? 'updating' : 'creating'} property:`, error);
+            setErrorMessage(error.message || `Network error ${propertyToEdit ? 'updating' : 'creating'} property`);
         } finally {
             setSubmitting(false);
         }
@@ -251,10 +367,10 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                         </div>
                         <div>
                             <h2 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
-                                Register New Property Asset
+                                {propertyToEdit ? `Edit Property: ${propertyToEdit.name}` : 'Register New Property Asset'}
                             </h2>
                             <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
-                                Add single or multi-location real estate assets to your portfolio
+                                {propertyToEdit ? 'Update details, pricing, location hierarchy, or media assets' : 'Add single or multi-location real estate assets to your portfolio'}
                             </p>
                         </div>
                     </div>
@@ -683,36 +799,198 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                         />
                     </div>
 
-                    {/* Image Upload */}
-                    <div>
-                        <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: '700', color: '#1e293b' }}>
-                            Property Gallery Images
-                        </label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                            {formData.images.map((img, idx) => (
-                                <img
-                                    key={idx}
-                                    src={img}
-                                    alt="Property"
-                                    style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                                />
-                            ))}
+                    {/* Image Upload & Gallery Management */}
+                    <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <div>
+                                <label style={{ display: 'block', margin: 0, fontSize: '0.9rem', fontWeight: '800', color: '#0f172a' }}>
+                                    📸 Property Photo Gallery
+                                </label>
+                                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                    {formData.images.length === 0 ? 'No photos uploaded yet.' : `${formData.images.length} photo${formData.images.length === 1 ? '' : 's'} attached. First image is the primary cover.`}
+                                </span>
+                            </div>
+                            {formData.images.length > 0 && (
+                                <span style={{ fontSize: '0.75rem', background: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '12px', fontWeight: '700' }}>
+                                    {formData.images.length} Photos
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Image Thumbnails Grid */}
+                        {formData.images.length > 0 && (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '12px', marginBottom: '1rem' }}>
+                                {formData.images.map((img, idx) => (
+                                    <div
+                                        key={idx}
+                                        style={{
+                                            position: 'relative',
+                                            borderRadius: '10px',
+                                            overflow: 'hidden',
+                                            border: idx === 0 ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                                            boxShadow: '0 2px 5px rgba(0,0,0,0.06)',
+                                            background: '#ffffff',
+                                            height: '95px'
+                                        }}
+                                    >
+                                        <img
+                                            src={img}
+                                            alt={`Property photo ${idx + 1}`}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+
+                                        {/* Cover Badge */}
+                                        {idx === 0 && (
+                                            <span style={{
+                                                position: 'absolute',
+                                                top: '4px',
+                                                left: '4px',
+                                                background: '#0284c7',
+                                                color: '#ffffff',
+                                                fontSize: '0.65rem',
+                                                fontWeight: '800',
+                                                padding: '2px 5px',
+                                                borderRadius: '4px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '3px',
+                                                boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                                            }}>
+                                                <Star size={10} fill="#ffffff" /> COVER
+                                            </span>
+                                        )}
+
+                                        {/* Action Overlay */}
+                                        <div style={{
+                                            position: 'absolute',
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
+                                            background: 'linear-gradient(transparent, rgba(15, 23, 42, 0.85))',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '4px 6px'
+                                        }}>
+                                            {idx !== 0 ? (
+                                                <button
+                                                    type="button"
+                                                    title="Set as cover photo"
+                                                    onClick={() => handleSetCoverImage(idx)}
+                                                    style={{
+                                                        background: 'rgba(255, 255, 255, 0.9)',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        padding: '3px',
+                                                        cursor: 'pointer',
+                                                        color: '#0284c7',
+                                                        display: 'flex'
+                                                    }}
+                                                >
+                                                    <Star size={12} />
+                                                </button>
+                                            ) : <div />}
+
+                                            <button
+                                                type="button"
+                                                title="Delete photo"
+                                                onClick={() => handleRemoveImage(idx)}
+                                                style={{
+                                                    background: 'rgba(239, 68, 68, 0.9)',
+                                                    border: 'none',
+                                                    borderRadius: '4px',
+                                                    padding: '3px',
+                                                    cursor: 'pointer',
+                                                    color: '#ffffff',
+                                                    display: 'flex'
+                                                }}
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Upload Controls & URL Input */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                             <label style={{
-                                width: '80px',
-                                height: '80px',
-                                border: '2px dashed #cbd5e1',
-                                borderRadius: '8px',
+                                padding: '0.85rem 1rem',
+                                border: '2px dashed #94a3b8',
+                                borderRadius: '10px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                cursor: 'pointer',
-                                backgroundColor: '#f8fafc'
+                                gap: '8px',
+                                cursor: uploading ? 'not-allowed' : 'pointer',
+                                backgroundColor: '#ffffff',
+                                color: '#475569',
+                                fontSize: '0.825rem',
+                                fontWeight: '700',
+                                transition: 'all 0.15s'
                             }}>
-                                <Upload size={20} color="#94a3b8" />
-                                <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} disabled={uploading} />
+                                {uploading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" color="#0284c7" />
+                                        <span>Uploading Photos...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload size={16} color="#0284c7" />
+                                        <span>Upload Files (Multi-Select)</span>
+                                    </>
+                                )}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={handleImageUpload}
+                                    style={{ display: 'none' }}
+                                    disabled={uploading}
+                                />
                             </label>
+
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <input
+                                    type="text"
+                                    value={imageUrlInput}
+                                    onChange={(e) => setImageUrlInput(e.target.value)}
+                                    placeholder="Or paste photo web link..."
+                                    style={{
+                                        flex: 1,
+                                        padding: '0.65rem 0.85rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.825rem',
+                                        boxSizing: 'border-box'
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleAddImageUrl();
+                                        }
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleAddImageUrl}
+                                    style={{
+                                        padding: '0 0.85rem',
+                                        borderRadius: '8px',
+                                        border: 'none',
+                                        background: '#0284c7',
+                                        color: '#ffffff',
+                                        fontSize: '0.8rem',
+                                        fontWeight: '700',
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    + Add URL
+                                </button>
+                            </div>
                         </div>
-                        {uploading && <p style={{ fontSize: '0.8rem', color: '#4f46e5', margin: '4px 0 0 0' }}>Uploading image...</p>}
                     </div>
 
                     {/* Modal Footer Actions */}
@@ -755,12 +1033,12 @@ const CreatePropertyModal: React.FC<CreatePropertyModalProps> = ({ isOpen, onClo
                             {submitting ? (
                                 <>
                                     <Loader2 size={18} className="animate-spin" />
-                                    Creating Property...
+                                    {propertyToEdit ? 'Saving Changes...' : 'Creating Property...'}
                                 </>
                             ) : (
                                 <>
                                     <Plus size={18} />
-                                    Save & Create Property
+                                    {propertyToEdit ? 'Save Changes' : 'Save & Create Property'}
                                 </>
                             )}
                         </button>
